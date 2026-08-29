@@ -1,0 +1,1150 @@
+{
+  "root": "root",
+  "root_hash": "fac0a6c8240bdbd9582a82d675ea6c00a7dcd4bc057348f1f400406a256c3a6b",
+  "nodes": [
+    {
+      "id": "leaf-rival-a-undercut-hold",
+      "parent": "resp-rival-a-undercut",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after undercut by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -2000.0,
+        "mid": -1200.0,
+        "high": -400.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "d40d1b23014acf52cce7c30d0230d886bae34b4115db5113cdbbebdf5376f1b1",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-undercut-partial_rollback",
+      "parent": "resp-rival-a-undercut",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after undercut by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1862.5,
+        "mid": -1062.5,
+        "high": -262.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "d982f6f0d31df8c42c6d93fb700f4928a96c4cf0687d4676737b1db8122f18e9",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-undercut-annual_discount",
+      "parent": "resp-rival-a-undercut",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after undercut by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1725.0,
+        "mid": -925.0,
+        "high": -125.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "78091a3d513e124d1c398ab78dea4e6e4c0ce07d8aac862f54f9f9343b70cd94",
+      "children": []
+    },
+    {
+      "id": "resp-rival-a-undercut",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival A: undercut",
+      "choice": "undercut",
+      "price_before": 45.0,
+      "price_after": 56.05,
+      "reasoning": "Fixture response undercut by Rival A.",
+      "sources": [
+        "https://rival-a.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "c86eac95122cb509ef3a5cce72042b48f7349544fbb930f683872300902afec1",
+      "children": [
+        "leaf-rival-a-undercut-annual_discount",
+        "leaf-rival-a-undercut-hold",
+        "leaf-rival-a-undercut-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-a-match-hold",
+      "parent": "resp-rival-a-match",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after match by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1587.5,
+        "mid": -787.5,
+        "high": 12.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "e0db86d3a16045c39298bc05b7fbd591d0815b095ad8b1458653e47f2add4079",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-match-partial_rollback",
+      "parent": "resp-rival-a-match",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after match by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1450.0,
+        "mid": -650.0,
+        "high": 150.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "ff9c7b6f2cb68fb38deeff5ec68660854709350ac039d19e0cc308ba984bf935",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-match-annual_discount",
+      "parent": "resp-rival-a-match",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after match by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1312.5,
+        "mid": -512.5,
+        "high": 287.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "8258ab65649067b8daaed5c6f83415769b96d6358619fa74ecb61ace52c3a592",
+      "children": []
+    },
+    {
+      "id": "resp-rival-a-match",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival A: match",
+      "choice": "match",
+      "price_before": 45.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture response match by Rival A.",
+      "sources": [
+        "https://rival-a.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "f2a7defd33cfed8fdf7331f334a7b00dd121781b3af2cc19bbafb05a064ef26f",
+      "children": [
+        "leaf-rival-a-match-annual_discount",
+        "leaf-rival-a-match-hold",
+        "leaf-rival-a-match-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-a-ignore-hold",
+      "parent": "resp-rival-a-ignore",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after ignore by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1175.0,
+        "mid": -375.0,
+        "high": 425.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "4769c1c741932b07cffded5805eeb6d46a0b5b07fe45220510b0da6a457e975f",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-ignore-partial_rollback",
+      "parent": "resp-rival-a-ignore",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after ignore by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -1037.5,
+        "mid": -237.5,
+        "high": 562.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "949e4846fe233a9c16fd797860f06be647f2261d76de1458edacfac56ad546ef",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-ignore-annual_discount",
+      "parent": "resp-rival-a-ignore",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after ignore by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -900.0,
+        "mid": -100.0,
+        "high": 700.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "5821e27cfd6d49eb3cd4c7724dad45ffd2092cf033bbdcbee2e2507f36f79991",
+      "children": []
+    },
+    {
+      "id": "resp-rival-a-ignore",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival A: ignore",
+      "choice": "ignore",
+      "price_before": 45.0,
+      "price_after": 45.0,
+      "reasoning": "Fixture response ignore by Rival A.",
+      "sources": [
+        "https://rival-a.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "5666dec3a257b55cca478325e2275ce8acf65546a26fe3a2fb2d4f806bdcf2f6",
+      "children": [
+        "leaf-rival-a-ignore-annual_discount",
+        "leaf-rival-a-ignore-hold",
+        "leaf-rival-a-ignore-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-a-raise-hold",
+      "parent": "resp-rival-a-raise",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after raise by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -762.5,
+        "mid": 37.5,
+        "high": 837.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "455e2eee204b793416b97281dcbf9c704c1079b9ea1f916833edfc3df0e7b6c3",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-raise-partial_rollback",
+      "parent": "resp-rival-a-raise",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after raise by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -625.0,
+        "mid": 175.0,
+        "high": 975.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "dd31b58fd0f801795dcc06792ca009ea25f6bbc5b064236182212bf916fa4490",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-a-raise-annual_discount",
+      "parent": "resp-rival-a-raise",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after raise by rival-a.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -487.5,
+        "mid": 312.5,
+        "high": 1112.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "5481fc50d628cc9faa7f76c6240cba67b1839e0c0fecf390e11a930b8e3b6a18",
+      "children": []
+    },
+    {
+      "id": "resp-rival-a-raise",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival A: raise",
+      "choice": "raise",
+      "price_before": 45.0,
+      "price_after": 47.25,
+      "reasoning": "Fixture response raise by Rival A.",
+      "sources": [
+        "https://rival-a.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "47c3f21a25f4ba20a141b4afff3f640891282b312769dcdaeb49c342f1eb9587",
+      "children": [
+        "leaf-rival-a-raise-annual_discount",
+        "leaf-rival-a-raise-hold",
+        "leaf-rival-a-raise-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-b-undercut-hold",
+      "parent": "resp-rival-b-undercut",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after undercut by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -350.0,
+        "mid": 450.0,
+        "high": 1250.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "434b2fd2aafa877048403f936f8c2c374b3c578007ea34acde317d9bdc9a345c",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-undercut-partial_rollback",
+      "parent": "resp-rival-b-undercut",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after undercut by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -212.5,
+        "mid": 587.5,
+        "high": 1387.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "61f7605f4f34566a5295820eca2b9026becf52ee1635ef35c831425c92a54daf",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-undercut-annual_discount",
+      "parent": "resp-rival-b-undercut",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after undercut by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": -75.0,
+        "mid": 725.0,
+        "high": 1525.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "f94dc1f7a9f654350c41ba11dcfc44cb769b2bf609ddaa5435699211917aed33",
+      "children": []
+    },
+    {
+      "id": "resp-rival-b-undercut",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival B: undercut",
+      "choice": "undercut",
+      "price_before": 52.0,
+      "price_after": 56.05,
+      "reasoning": "Fixture response undercut by Rival B.",
+      "sources": [
+        "https://rival-b.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "1a9b5242adf5092845d0070be2391f76da5d8cbdad3d717fa4b2bb63c29cc675",
+      "children": [
+        "leaf-rival-b-undercut-annual_discount",
+        "leaf-rival-b-undercut-hold",
+        "leaf-rival-b-undercut-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-b-match-hold",
+      "parent": "resp-rival-b-match",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after match by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 62.5,
+        "mid": 862.5,
+        "high": 1662.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "7e30c7880642a7a262618c9a1eed2fbd6bf8ef4adec088c37e26a97092f6e7de",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-match-partial_rollback",
+      "parent": "resp-rival-b-match",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after match by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 200.0,
+        "mid": 1000.0,
+        "high": 1800.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "30cf535fc0b1e09c4c42300f14467bfbc6439b80e14e0098e375f0d46730a458",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-match-annual_discount",
+      "parent": "resp-rival-b-match",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after match by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 337.5,
+        "mid": 1137.5,
+        "high": 1937.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "94d5cd3f456fc2defea34515ece65d86e69dcd1c05ebcf735664795a1f76f2e9",
+      "children": []
+    },
+    {
+      "id": "resp-rival-b-match",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival B: match",
+      "choice": "match",
+      "price_before": 52.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture response match by Rival B.",
+      "sources": [
+        "https://rival-b.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "84a5e3432e9cc1adaf0b9d4f0f32e71b851f415681a82a3da66baaa7585955ce",
+      "children": [
+        "leaf-rival-b-match-annual_discount",
+        "leaf-rival-b-match-hold",
+        "leaf-rival-b-match-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-b-ignore-hold",
+      "parent": "resp-rival-b-ignore",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after ignore by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 475.0,
+        "mid": 1275.0,
+        "high": 2075.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "1cea1904d736eb1fe0a69f99225d8ea9a848edb0fccf32b5698db9bd54104194",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-ignore-partial_rollback",
+      "parent": "resp-rival-b-ignore",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after ignore by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 612.5,
+        "mid": 1412.5,
+        "high": 2212.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "f60f4fe5f83990585658d197667ea8783ac3da96bf2bfe73be6eaa2cc5b8d42d",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-ignore-annual_discount",
+      "parent": "resp-rival-b-ignore",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after ignore by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 750.0,
+        "mid": 1550.0,
+        "high": 2350.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "923a1f3f8f5acc381feed0bc4fb71d527d5a3123e5074f41943454e3a8371d64",
+      "children": []
+    },
+    {
+      "id": "resp-rival-b-ignore",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival B: ignore",
+      "choice": "ignore",
+      "price_before": 52.0,
+      "price_after": 52.0,
+      "reasoning": "Fixture response ignore by Rival B.",
+      "sources": [
+        "https://rival-b.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "858821b9f9df851526ef47780026dc1e2a6cbd9e1fee9ab24c372eafea992f9a",
+      "children": [
+        "leaf-rival-b-ignore-annual_discount",
+        "leaf-rival-b-ignore-hold",
+        "leaf-rival-b-ignore-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-b-raise-hold",
+      "parent": "resp-rival-b-raise",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after raise by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 887.5,
+        "mid": 1687.5,
+        "high": 2487.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "4d3c6439e02f99bc052107d03e24d4b3c0abefcb043086b99bbc632c76e31331",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-raise-partial_rollback",
+      "parent": "resp-rival-b-raise",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after raise by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1025.0,
+        "mid": 1825.0,
+        "high": 2625.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "b8970b71e19a53e45455eab1e7f386e9e882ef9b75faf70a58635b93f16b902c",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-b-raise-annual_discount",
+      "parent": "resp-rival-b-raise",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after raise by rival-b.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1162.5,
+        "mid": 1962.5,
+        "high": 2762.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "22e5c59da88a9503791caace47688747063c5aeeee9a087616cb0e4e2b88be5c",
+      "children": []
+    },
+    {
+      "id": "resp-rival-b-raise",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival B: raise",
+      "choice": "raise",
+      "price_before": 52.0,
+      "price_after": 54.6,
+      "reasoning": "Fixture response raise by Rival B.",
+      "sources": [
+        "https://rival-b.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "0d777f6171759672b0a267c59e99668e91d1e4fd1c5e9ea55f51c5678ac12020",
+      "children": [
+        "leaf-rival-b-raise-annual_discount",
+        "leaf-rival-b-raise-hold",
+        "leaf-rival-b-raise-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-c-undercut-hold",
+      "parent": "resp-rival-c-undercut",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after undercut by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1300.0,
+        "mid": 2100.0,
+        "high": 2900.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "8c918c5a183e82882b5b562bfaf734aba76e1cf51b722d8404e475f31fc47f98",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-undercut-partial_rollback",
+      "parent": "resp-rival-c-undercut",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after undercut by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1437.5,
+        "mid": 2237.5,
+        "high": 3037.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "26a5ffa9dd6dad5fda5c03fa7e03cb06416541d9f8d6aeeb89d1214be8c59982",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-undercut-annual_discount",
+      "parent": "resp-rival-c-undercut",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after undercut by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1575.0,
+        "mid": 2375.0,
+        "high": 3175.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "0cad02cb0c8c02fbab8933942fec7a80a0fac9eeae88175ea993c6b78890a95d",
+      "children": []
+    },
+    {
+      "id": "resp-rival-c-undercut",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival C: undercut",
+      "choice": "undercut",
+      "price_before": 47.0,
+      "price_after": 56.05,
+      "reasoning": "Fixture response undercut by Rival C.",
+      "sources": [
+        "https://rival-c.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "cec2ec7dfed93c6fb0b4e3a3003256044ed28071a5a24ad31af8db7857459ccf",
+      "children": [
+        "leaf-rival-c-undercut-annual_discount",
+        "leaf-rival-c-undercut-hold",
+        "leaf-rival-c-undercut-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-c-match-hold",
+      "parent": "resp-rival-c-match",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after match by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1712.5,
+        "mid": 2512.5,
+        "high": 3312.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "7bb3d8d6cc8ee0c0ccec6decc1c03991882a4603b16fe4eb6fe8e5a976974fa2",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-match-partial_rollback",
+      "parent": "resp-rival-c-match",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after match by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1850.0,
+        "mid": 2650.0,
+        "high": 3450.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "0917e13f05642fd7e82edbaeeb11f5ab7b5258c934e35a62500c17a087db3465",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-match-annual_discount",
+      "parent": "resp-rival-c-match",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after match by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 1987.5,
+        "mid": 2787.5,
+        "high": 3587.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "22ed9be5269016795a4d113ca006b7171d7f5a79cd8fd7b8d1adb81642f60522",
+      "children": []
+    },
+    {
+      "id": "resp-rival-c-match",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival C: match",
+      "choice": "match",
+      "price_before": 47.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture response match by Rival C.",
+      "sources": [
+        "https://rival-c.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "4c568a2a384a8dca10cec6e03f45da3db0b9241a20a6aa000e9be67e16d61646",
+      "children": [
+        "leaf-rival-c-match-annual_discount",
+        "leaf-rival-c-match-hold",
+        "leaf-rival-c-match-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-c-ignore-hold",
+      "parent": "resp-rival-c-ignore",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after ignore by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2125.0,
+        "mid": 2925.0,
+        "high": 3725.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "978365ad01c8d71aa15cb5b253f796a11bfb91c7389ea966e09964182db9ffa6",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-ignore-partial_rollback",
+      "parent": "resp-rival-c-ignore",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after ignore by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2262.5,
+        "mid": 3062.5,
+        "high": 3862.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "2a22a3366841d013544a0fb1472b033845da4b079b9fb773ef71adc8e2b6d423",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-ignore-annual_discount",
+      "parent": "resp-rival-c-ignore",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after ignore by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2400.0,
+        "mid": 3200.0,
+        "high": 4000.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "97f93626dc05cf2f9e772f5ef040596244668a39183a4534de8ef0fa624667dc",
+      "children": []
+    },
+    {
+      "id": "resp-rival-c-ignore",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival C: ignore",
+      "choice": "ignore",
+      "price_before": 47.0,
+      "price_after": 47.0,
+      "reasoning": "Fixture response ignore by Rival C.",
+      "sources": [
+        "https://rival-c.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "8115910ce594c11899280e5f68a27d92dfdf726c85504953d7b6c9eb2efc0ab6",
+      "children": [
+        "leaf-rival-c-ignore-annual_discount",
+        "leaf-rival-c-ignore-hold",
+        "leaf-rival-c-ignore-partial_rollback"
+      ]
+    },
+    {
+      "id": "leaf-rival-c-raise-hold",
+      "parent": "resp-rival-c-raise",
+      "actor": "you",
+      "label": "hold",
+      "choice": "hold",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter hold after raise by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2537.5,
+        "mid": 3337.5,
+        "high": 4137.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "f8e9bb6194c4cfedae4f3f93f7ea5b2c16cb569cf021e8905e4ebdc81964f373",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-raise-partial_rollback",
+      "parent": "resp-rival-c-raise",
+      "actor": "you",
+      "label": "partial_rollback",
+      "choice": "partial_rollback",
+      "price_before": 59.0,
+      "price_after": 54.0,
+      "reasoning": "Fixture counter partial_rollback after raise by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2675.0,
+        "mid": 3475.0,
+        "high": 4275.0,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "5d6af2cea6348f311dddf5aeda31afa370ef7e2fe488b9e66651c0a69073481c",
+      "children": []
+    },
+    {
+      "id": "leaf-rival-c-raise-annual_discount",
+      "parent": "resp-rival-c-raise",
+      "actor": "you",
+      "label": "annual_discount",
+      "choice": "annual_discount",
+      "price_before": 59.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture counter annual_discount after raise by rival-c.",
+      "sources": [],
+      "assumptions": {
+        "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+      },
+      "score": {
+        "low": 2812.5,
+        "mid": 3612.5,
+        "high": 4412.5,
+        "low_pct": -1.4,
+        "mid_pct": -0.2,
+        "high_pct": 1.1
+      },
+      "hash": "d2fbcaafe25e21211d1b7e7beff2aae3486f881ddd04a1ff7f09fc5bff6a3657",
+      "children": []
+    },
+    {
+      "id": "resp-rival-c-raise",
+      "parent": "root",
+      "actor": "competitor",
+      "label": "Rival C: raise",
+      "choice": "raise",
+      "price_before": 47.0,
+      "price_after": 49.35,
+      "reasoning": "Fixture response raise by Rival C.",
+      "sources": [
+        "https://rival-c.example/pricing"
+      ],
+      "assumptions": {},
+      "score": null,
+      "hash": "740e782bfc8394271b57ba3303bca574026daeef6f61f903895c2f60881152ae",
+      "children": [
+        "leaf-rival-c-raise-annual_discount",
+        "leaf-rival-c-raise-hold",
+        "leaf-rival-c-raise-partial_rollback"
+      ]
+    },
+    {
+      "id": "root",
+      "parent": null,
+      "actor": "you",
+      "label": "Raise Pro 49 to 59",
+      "choice": "price_change",
+      "price_before": 49.0,
+      "price_after": 59.0,
+      "reasoning": "Fixture root move.",
+      "sources": [],
+      "assumptions": {},
+      "score": null,
+      "hash": "fac0a6c8240bdbd9582a82d675ea6c00a7dcd4bc057348f1f400406a256c3a6b",
+      "children": [
+        "resp-rival-a-ignore",
+        "resp-rival-a-match",
+        "resp-rival-a-raise",
+        "resp-rival-a-undercut",
+        "resp-rival-b-ignore",
+        "resp-rival-b-match",
+        "resp-rival-b-raise",
+        "resp-rival-b-undercut",
+        "resp-rival-c-ignore",
+        "resp-rival-c-match",
+        "resp-rival-c-raise",
+        "resp-rival-c-undercut"
+      ]
+    }
+  ]
+}

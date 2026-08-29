@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "score_result",
+  "type": "object",
+  "required": [
+    "leaf_id",
+    "low",
+    "mid",
+    "high",
+    "low_pct",
+    "mid_pct",
+    "high_pct",
+    "assumptions"
+  ],
+  "properties": {
+    "leaf_id": {
+      "type": "string"
+    },
+    "low": {
+      "type": "number"
+    },
+    "mid": {
+      "type": "number"
+    },
+    "high": {
+      "type": "number"
+    },
+    "low_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "const": "n/a"
+        }
+      ]
+    },
+    "mid_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "const": "n/a"
+        }
+      ]
+    },
+    "high_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "const": "n/a"
+        }
+      ]
+    },
+    "assumptions": {
+      "type": "object"
+    }
+  }
+}

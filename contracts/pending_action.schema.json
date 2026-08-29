@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "pending_action",
+  "type": "object",
+  "required": [
+    "id",
+    "sentence",
+    "diff",
+    "memo_markdown",
+    "winning_branch_id",
+    "root_hash",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "sentence": {
+      "type": "string",
+      "description": "e.g. 'Open a change request to raise Pro to $59 on Sept 7?'"
+    },
+    "diff": {
+      "type": "string"
+    },
+    "memo_markdown": {
+      "type": "string"
+    },
+    "winning_branch_id": {
+      "type": "string"
+    },
+    "root_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "waiting",
+        "approved",
+        "denied"
+      ]
+    },
+    "deny_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

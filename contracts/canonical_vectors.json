@@ -1,0 +1,32 @@
+[
+  {
+    "name": "tie-half-even-down",
+    "input": 0.1234565,
+    "canonical": "{\"x\":0.123456}"
+  },
+  {
+    "name": "tie-half-even-up",
+    "input": 0.1234575,
+    "canonical": "{\"x\":0.123458}"
+  },
+  {
+    "name": "negative-zero",
+    "input": -0.0,
+    "canonical": "{\"x\":0.0}"
+  },
+  {
+    "name": "near-zero",
+    "input": 1e-09,
+    "canonical": "{\"x\":0.0}"
+  },
+  {
+    "name": "integer-float",
+    "input": 59.0,
+    "canonical": "{\"x\":59.0}"
+  },
+  {
+    "name": "long-fraction",
+    "input": 1.0000004999,
+    "canonical": "{\"x\":1.0}"
+  }
+]

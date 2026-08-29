@@ -1,0 +1,25 @@
+[
+  {
+    "competitor": "Rival A",
+    "price": 45,
+    "pricing_url": "https://rival-a.example/pricing",
+    "news_urls": [
+      "https://news.example/rival-a-funding"
+    ],
+    "notes": "price 45; plan count 3"
+  },
+  {
+    "competitor": "Rival B",
+    "price": 52,
+    "pricing_url": "https://rival-b.example/pricing",
+    "news_urls": [],
+    "notes": "price 52"
+  },
+  {
+    "competitor": "Rival C",
+    "price": 47,
+    "pricing_url": "https://rival-c.example/pricing",
+    "news_urls": [],
+    "notes": "price 47"
+  }
+]

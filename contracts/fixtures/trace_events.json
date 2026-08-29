@@ -1,0 +1,29 @@
+[
+  {
+    "ts": "2026-08-29T17:01:00Z",
+    "actor": "orchestrator",
+    "column": "did",
+    "text": "checked Rival A's pricing page",
+    "tool": "brightdata.scrape_as_markdown",
+    "detail": {
+      "url": "https://rival-a.example/pricing",
+      "price": 45
+    }
+  },
+  {
+    "ts": "2026-08-29T17:01:20Z",
+    "actor": "rival-a-agent",
+    "column": "doing",
+    "text": "deciding how Rival A responds",
+    "tool": null,
+    "detail": {}
+  },
+  {
+    "ts": "2026-08-29T17:02:00Z",
+    "actor": "orchestrator",
+    "column": "waiting",
+    "text": "waiting for your approval",
+    "tool": null,
+    "detail": {}
+  }
+]

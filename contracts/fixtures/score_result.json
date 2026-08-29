@@ -1,0 +1,18 @@
+{
+  "leaf_id": "leaf-rival-a-undercut-hold",
+  "low": -1270.34,
+  "mid": 480.12,
+  "high": 2210.55,
+  "low_pct": -1.8,
+  "mid_pct": 0.7,
+  "high_pct": 3.2,
+  "assumptions": {
+    "eps": {
+      "low": -1.25,
+      "mid": -1.1,
+      "high": -0.95
+    },
+    "eta": 0.4,
+    "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"
+  }
+}

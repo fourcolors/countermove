@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "move",
+  "type": "object",
+  "required": [
+    "plan",
+    "from",
+    "to",
+    "action",
+    "effective"
+  ],
+  "properties": {
+    "plan": {
+      "type": "string"
+    },
+    "from": {
+      "type": "number"
+    },
+    "to": {
+      "type": "number"
+    },
+    "action": {
+      "const": "open_pr"
+    },
+    "effective": {
+      "type": "string",
+      "format": "date"
+    }
+  }
+}

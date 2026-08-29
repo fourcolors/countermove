@@ -1,0 +1,50 @@
+{
+  "name": "Acme Stay",
+  "plans": [
+    {
+      "id": "pro",
+      "price": 49,
+      "segments": [
+        {
+          "id": "smb",
+          "customers": 300,
+          "monthly_churn": 0.04,
+          "elasticity": {
+            "low": -1.25,
+            "mid": -1.1,
+            "high": -0.95
+          },
+          "cross_elasticity": 0.4
+        },
+        {
+          "id": "mid",
+          "customers": 120,
+          "monthly_churn": 0.02,
+          "elasticity": {
+            "low": -0.95,
+            "mid": -0.8,
+            "high": -0.65
+          },
+          "cross_elasticity": 0.3
+        }
+      ]
+    }
+  ],
+  "competitors": [
+    {
+      "name": "Rival A",
+      "url": "https://rival-a.example/pricing",
+      "price": 45
+    },
+    {
+      "name": "Rival B",
+      "url": "https://rival-b.example/pricing",
+      "price": 52
+    },
+    {
+      "name": "Rival C",
+      "url": "https://rival-c.example/pricing",
+      "price": 47
+    }
+  ]
+}
