@@ -100,7 +100,7 @@ Definitions that remove all implementation freedom:
 
 Run three times per leaf with `eps` at the segment's `low`, `mid`, and `high` (see the elasticity range schema in Data shapes). Report `{low, mid, high}` in dollars and percent. Never print a single confidence percentage.
 
-Defaults with no data: B2B with switching costs -0.7 to -0.9; B2B without lock-in -1.0 to -1.3; consumer -1.5 to -2.0. Cross-price default +0.4. A user-supplied scalar elasticity `e` expands deterministically to `{low: e - 0.15, mid: e, high: e + 0.15}` (high clamped below 0).
+Defaults with no data, in schema field terms: B2B with switching costs `{low: -0.9, high: -0.7}`; B2B without lock-in `{low: -1.3, high: -1.0}`; consumer `{low: -2.0, high: -1.5}`; `mid` is the midpoint. Cross-price default +0.4. A user-supplied scalar elasticity `e` expands deterministically to `{low: e - 0.15, mid: e, high: e + 0.15}` (high clamped below 0).
 
 Every assumption is displayed next to the score and is editable, including the counter-move parameters above. Editing reruns the script in the sandbox.
 
@@ -110,7 +110,7 @@ After every leaf is scored, the agent writes a verdict before proposing an actio
 
 1. Recommended path, one sentence, with its score band.
 2. Runner-up and why it lost.
-3. The assumption the answer is most sensitive to, read off the already-computed low and high bands of the top two paths - the assumption whose range end narrows or flips the ranking most; no extra reruns.
+3. How sensitive the ranking is to price sensitivity (own-price elasticity), read off the already-computed low and high bands of the top two paths - whether any range end flips the ranking; no extra reruns. Other assumptions are editable but not sensitivity-ranked in v0, and the verdict says so.
 4. What to watch after acting: a concrete trigger that would flip the recommendation ("Rival A below $42 within 30 days").
 
 The approval card carries the recommendation's first move. The watch trigger is stored with the decision and checked at the start of the next session.
@@ -119,7 +119,7 @@ The approval card carries the recommendation's first move. The watch trigger is 
 
 Every node carries `hash = sha256(canonical(content) + child hashes)`. Node content is every field of the node except `hash` itself (see the tree node schema in Data shapes). The root hash is written into the decision memo and the PR body.
 
-`canonical()` is pinned so two implementations cannot disagree: JSON with lexicographically sorted keys (RFC 8785 style), UTF-8, floats rounded to 6 decimal places before serialization, `sources` sorted, segments sorted by id, child hashes concatenated in child-node-id order.
+`canonical()` is pinned so two implementations cannot disagree: JSON with lexicographically sorted keys (RFC 8785 style), UTF-8, floats rounded half-even to 6 decimal places and serialized in their shortest round-trip decimal form, negative zero normalized to zero, non-finite values invalid, `sources` sorted, segments sorted by id, child hashes concatenated in child-node-id order. Reference vectors covering rounding ties and near-zero values live in `contracts/` and are part of S2's tests.
 
 What verification means, precisely:
 
@@ -163,8 +163,8 @@ Every refusal in this plan has an enforcing actor that is not the model's own ju
 
 Scraped pages and search results are adversarial input. v0 controls:
 
-- The subagent context receives only structured facts extracted from a page (price as a number, competitor name as an escaped string). If a raw page excerpt is included for qualitative reasoning, it is wrapped in a per-session random boundary token that scraped content cannot predict; any occurrence of the token inside scraped text is stripped before wrapping, and the subagent is instructed to treat wrapped content strictly as data.
-- The decision memo and PR body are built from a typed template. Subagent reasoning renders inside fenced quote blocks, never interpolated into instructions, links, or the diff.
+- The subagent context receives only allowlisted, schema-validated structured facts produced by an isolated extraction stage (price as a number, competitor name as an escaped string, up to three source URLs). Raw page text never enters subagent context in v0 - a delimiter convention would be an instruction to the model, not an enforcement boundary. The subagent's output is forced-choice, and the orchestrator validates the choice and every tool argument against the fixed menus independently of any model text.
+- The decision memo and PR body are built from a typed template. Subagent reasoning renders inside a fenced block whose fence length is max(3, longest backtick run in the content + 1) - CommonMark guarantees content cannot terminate such a fence - and is never interpolated into instructions, links, or the diff. The injection test includes reasoning carrying nested fences and Markdown links.
 - The demo runs against snapshot mirrors of competitor pages that the team controls, so nothing unvetted can appear on camera.
 
 ## Slices
@@ -178,7 +178,7 @@ A slice is done when both reviews pass and the PR is merged by a human.
 
 **S0 - Rails** (serial; everything else waits on it)
 Depends: nothing.
-AC: TrueForge runs hello-world, and hello-world exercises every extension surface the other slices plug into - it makes one MCP call, one sandbox exec, and emits trace events through a frozen trace-emit API; the tool router is in place with the three-tool allowlist and an automated test shows a request for a fake fourth tool is refused and traced; Qodo is installed and posts a review on the first PR; `contracts/` holds frozen JSON schemas plus fixtures for company, move, tree node, score result, trace event, pending action (approval card), recommendation, and competitor persona card, plus `contracts/jargon.json` (the jargon translation map) and one complete depth-two fixture tree with per-node hashes and a root minted by a throwaway reference script committed alongside it; `.env.example` lists every variable the rails need plus named placeholders for Bright Data and GitHub credentials (standing rule: any slice introducing a variable updates `.env.example` in the same PR); the first PR is merged.
+AC: TrueForge runs hello-world, and hello-world exercises every extension surface the other slices plug into - it makes one MCP call, one sandbox exec, and emits trace events through a frozen trace-emit API; the tool router is in place with the three-tool allowlist and an automated test shows a request for a fake fourth tool is refused and traced; Qodo is installed and posts a review on the first PR; `contracts/` holds frozen JSON schemas plus fixtures for company, move, tree node, score result, trace event, pending action (approval card), recommendation, and competitor persona card, plus `contracts/jargon.json` (the jargon translation map) and one complete depth-two fixture tree with per-node hashes and a root minted by a throwaway reference script committed alongside it, plus canonical() reference vectors for rounding ties and near-zero values; `.env.example` lists every variable the rails need plus named placeholders for Bright Data and GitHub credentials (standing rule: any slice introducing a variable updates `.env.example` in the same PR); the first PR is merged.
 Features: Feature: Rails.
 
 **Wave 1 - fully parallel after S0. Each slice adds its own module against S0's frozen extension surfaces and `contracts/` fixtures; no Wave-1 slice touches a shared file.**
@@ -212,14 +212,14 @@ Features: Feature: Company bootstrap, Feature: Move.
 
 **S6 - Tree**
 Depends: S1, S2, S3.
-AC: one subagent per competitor in parallel, each a distinct trace actor; responses are forced-choice with numeric price_before/price_after per the fixed semantics, reasoning, and sources; scraped content reaches subagents only per the untrusted-content boundary, with an automated injection test; the C-prime convention is applied and displayed as an editable assumption; every leaf scored with bands in dollars and percent, and editing an assumption reruns the scorer and updates the display; every node hashed at creation and the root exposed; at most 36 leaves; the one-extra-scrape budget is enforced by the orchestrator's counter and a second request is refused and traced; interactive depth works as specified (depth 0 default with best-scoring counters, depth 1 pauses once, the setting asked in plain language and remembered); after scoring, the recommendation names the path, the runner-up, the most sensitive assumption read off the top two paths' bands, and a concrete watch trigger; the highest-mid-score path is highlighted and its first move queued as the pending action.
+AC: one subagent per competitor in parallel, each a distinct trace actor; responses are forced-choice with numeric price_before/price_after per the fixed semantics, reasoning, and sources; scraped content reaches subagents only per the untrusted-content boundary, with an automated injection test; the C-prime convention is applied and displayed as an editable assumption; every leaf scored with bands in dollars and percent, and editing an assumption reruns the scorer and updates the display; every node hashed at creation and the root exposed; at most 36 leaves; the one-extra-scrape budget is enforced by the orchestrator's counter and a second request is refused and traced; interactive depth works as specified (depth 0 default with best-scoring counters, depth 1 pauses once, the setting asked in plain language and remembered); after scoring, the recommendation names the path, the runner-up, the price-sensitivity risk read off the top two paths' bands, and a concrete watch trigger; the highest-mid-score path is highlighted and its first move queued as the pending action.
 Features: Feature: Tree, Feature: Interactive depth, Feature: Recommendation (except the next-session trigger check, owned by S8), Feature: Untrusted content (subagent scenario).
 
 **Wave 3**
 
 **S7 - Gate**
 Depends: S6, S4, S2.
-AC: pending action shows the diff, memo text, winning branch, and root hash with nothing written; the gate service holds the only write credential and refuses without a token minted by a human Allow click; `approve_action` over MCP queues but cannot authorize; Allow opens the PR with the `pricing.yaml` change plus memo, and both the memo and the PR body carry the root hash; the memo and PR are rendered from the typed template with reasoning in fenced quote blocks, with an automated injection test; Deny writes locally with the reason; after a Deny, selecting a different branch queues a new pending action and the denied one remains in did; the UI recomputes the root from the stored tree and flags a memo mismatch; both paths traced and filmed.
+AC: pending action shows the diff, memo text, winning branch, and root hash with nothing written; the gate service holds the only write credential and refuses without a token minted by a human Allow click; the approval queue API is callable programmatically but cannot authorize - only the UI Allow click mints the token (the MCP surface stays stretch); Allow opens the PR with the `pricing.yaml` change plus memo, and both the memo and the PR body carry the root hash; the memo and PR are rendered from the typed template with reasoning in fenced quote blocks, with an automated injection test; Deny writes locally with the reason; after a Deny, selecting a different branch queues a new pending action and the denied one remains in did; the UI recomputes the root from the stored tree and flags a memo mismatch; both paths traced and filmed.
 Features: Feature: Gate, Feature: Untrusted content (memo/PR scenario), Feature: Provenance (memo, tamper-flag scenarios).
 
 **S8 - Session and watch trigger**
@@ -519,9 +519,9 @@ Feature: Gate
     Then the gate service refuses the write because no approval token exists
     And the refusal appears in the trace
 
-  Scenario: approve_action without a human click does nothing
-    Given the MCP server is enabled and a pending action exists
-    When an assistant client calls approve_action
+  Scenario: A programmatic approval request cannot authorize
+    Given a pending action exists
+    When any caller other than the UI Allow click requests approval
     Then no approval token is minted
     And no PR is opened
     And the pending action stays in the waiting column
@@ -632,11 +632,12 @@ Feature: Recommendation
     And it names one recommended path with its band
     And it names the runner-up and why it lost
 
-  Scenario: Most sensitive assumption is named
+  Scenario: Price-sensitivity risk is named
     Given the top two paths with their low, mid, and high bands
     When their band ends are compared
-    Then the recommendation names the assumption whose range end narrows or flips the ranking most
+    Then the recommendation states whether any price-sensitivity range end flips the ranking
     And no extra scoring runs are performed
+    And other assumptions are labeled editable but not sensitivity-ranked
 
   Scenario: Watch trigger is concrete
     When the recommendation is shown
@@ -656,13 +657,13 @@ Feature: Untrusted content
   Scenario: Injected page text cannot change a subagent's choice
     Given a snapshot competitor page containing instruction-like text
     When the subagent responds to the move
-    Then the page reaches the subagent only as structured facts or inside the session's random boundary token
-    And the subagent's tool calls are unchanged by the injected text
+    Then the page reaches the subagent only as schema-validated structured facts
+    And the subagent's choice and tool calls are validated against the fixed menus
 
   Scenario: Memo and PR render reasoning as quoted text
     Given a winning branch whose reasoning contains markup or instruction-like text
     When the memo and PR body are written
-    Then the reasoning appears only inside fenced quote blocks
+    Then the reasoning appears only inside a fenced block that its content cannot terminate
     And the pricing.yaml diff contains only the numeric price change
 
 
