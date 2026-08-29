@@ -35,7 +35,11 @@ Run instructions land with the orchestrator in build step 1.
 ## Qodo Code Review Evidence
 
 Every substantive change goes through a PR reviewed by Qodo; PRs are merged only by a human.
+Direct pushes to `main` do not count toward the review trail.
+
 Evidence (merged PRs with Qodo reviews) will be linked here as they land.
+
+- First Qodo-reviewed PR: (link after merge)
 
 ## Disclosure
 
