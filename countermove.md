@@ -1,4 +1,4 @@
-# Countermove — scope and build plan
+# Countermove - scope and build plan
 
 Working name. Change it if Sterling has a better one.
 
@@ -12,7 +12,7 @@ Who hires it: a founder or operator with a specific, irreversible move this week
 
 In: one move type (price change on one plan), depth-two tree, three competitors, price-shaped counter-moves only, one gated action, synthetic company with real competitors, single-page UI.
 
-Out: non-price moves, deeper trees, CRM or database connectors, auth, multi-user, any FlowStay or Property.bot data, the MiroFish codebase (AGPL — ideas only).
+Out: non-price moves, deeper trees, CRM or database connectors, auth, multi-user, any FlowStay or Property.bot data, the MiroFish codebase (AGPL - ideas only).
 
 ## Who uses it
 
@@ -26,31 +26,35 @@ A business owner, not an engineer. Every screen passes this test: no YAML, no co
 
 ## Components
 
-1. **UI** — one page, chat-first. The conversation drives setup, the move, and the decision. Inline widgets: company card, tree, approval card. A trace panel shows doing / waiting / did in plain language ("checking Rival A's pricing page", "waiting for your approval", "opened change request #12").
-2. **Orchestrator** — runs on TrueForge. Owns the session, spawns subagents, calls tools, pauses at the gate.
-3. **Tools** — Bright Data MCP (`scrape_as_markdown`, `search_engine`), TrueForge sandbox exec, GitHub MCP (read repo, open PR). Nothing else.
-4. **Subagents** — one per competitor. Forced-choice response from a menu, with reasoning and the data used.
-5. **Scorer** — `score.py`, checked into the repo, run in the sandbox.
-6. **Session store** — JSON on disk. Company, moves, trees, decisions.
+1. **UI** - one page, chat-first. The conversation drives setup, the move, and the decision. Inline widgets: company card, tree, approval card. A trace panel shows doing / waiting / did in plain language ("checking Rival A's pricing page", "waiting for your approval", "opened change request #12").
+2. **Orchestrator** - runs on TrueForge. Owns the session, spawns subagents, calls tools, pauses at the gate.
+3. **Tools** - Bright Data MCP (`scrape_as_markdown`, `search_engine`), TrueForge sandbox exec, GitHub MCP (read repo, open PR). Nothing else.
+4. **Subagents** - one per competitor. Forced-choice response from a menu, with reasoning and the data used.
+5. **Scorer** - `score.py`, checked into the repo, run in the sandbox.
+6. **Session store** - JSON on disk. Company, moves, trees, decisions, scrape snapshots.
+7. **Provenance lib** - `provenance.py`: `canonical()` serialization and Merkle hashing per the Provenance section, used by the tree builder, the what-if path, and the memo writer.
+8. **Gate service** - holds the GitHub write credential and mints approval tokens from human Allow clicks. The only component that can write remotely.
+
+Contracts: the JSON schemas and fixtures for company, move, tree node, score result, trace event, pending action, recommendation, and persona card - plus the jargon map and a reference-hashed fixture tree - live in `contracts/` and are frozen in the rails slice, so every other slice builds against fixtures in parallel.
 
 ## Data shapes
 
 ```yaml
-# company.yaml — drafted by the agent from the URL, corrected by the human
+# company.yaml - drafted by the agent from the URL, corrected by the human
 name: Acme Stay
 plans:
   - id: pro
     price: 49
     segments:
-      - id: smb        # name, customers, monthly_churn, elasticity, cross_elasticity
+      - id: smb        # name, customers, monthly_churn, elasticity range, cross_elasticity
         customers: 300
         monthly_churn: 0.04
-        elasticity: -1.1
+        elasticity: { low: -1.25, mid: -1.1, high: -0.95 }   # a scalar input expands to +/-0.15
         cross_elasticity: 0.4
       - id: mid
         customers: 120
         monthly_churn: 0.02
-        elasticity: -0.8
+        elasticity: { low: -0.95, mid: -0.8, high: -0.65 }
         cross_elasticity: 0.3
 competitors:
   - name: Rival A
@@ -59,7 +63,7 @@ competitors:
 ```
 
 ```yaml
-# move.yaml — one sentence in, structured out
+# move.yaml - one sentence in, structured out
 plan: pro
 from: 49
 to: 59
@@ -67,26 +71,38 @@ action: open_pr            # v0: PR to the company's pricing config + decision m
 effective: 2026-09-07
 ```
 
-Tree node: `{ id, parent, actor: "you" | "competitor", label, choice, reasoning, sources: [urls], score: { low, mid, high }, assumptions: {...} }`
+Tree node: `{ id, parent, actor: "you" | "competitor", label, choice, price_before, price_after, reasoning, sources: [urls], score: { low, mid, high }, assumptions: {...} }`
 
-Competitor response menu: `undercut`, `match`, `ignore`, `raise`. Your counter menu: `hold`, `partial_rollback`, `annual_discount`.
+Competitor response menu with fixed price semantics (each editable as a per-node assumption): `undercut` = 5% below your new price, `match` = your new price, `ignore` = unchanged, `raise` = 5% above their current price. Every response node carries numeric `price_before` and `price_after` computed by these rules - a categorical choice alone is not a valid node. Your counter menu: `hold`, `partial_rollback`, `annual_discount`.
+
+`C` and `C'` convention: `C'` is the mean of all three competitors' `price_after`, where the two non-responding competitors in a branch keep their last scraped price. This convention is displayed as an editable assumption on every leaf.
 
 ## Scoring (score.py)
 
-Per segment `s`: `P` current price, `P'` new price, `C` and `C'` competitor average price before and after their response, `N` customers, `m` monthly churn, `eps` own-price elasticity, `eta` cross-price elasticity, `months` = 6.
+Per segment `s`: `P` current price, `P'` your price after the move and your counter, `C` and `C'` competitor average price before and after their response, `N` customers, `m` monthly churn, `eps` own-price elasticity, `eta` cross-price elasticity, `months` = 6.
 
 ```
-retention  = clamp((P'/P) ** eps * (C'/C) ** eta, 0, 1.05)
-customers  = N * retention * (1 - m) ** months
-revenue    = customers * P' * months - move_cost
-score      = sum(revenue over segments) - baseline_revenue
+price_factor    = clamp((P'/P) ** eps * (C'/C) ** eta, 0, 1)
+customer_months = N * price_factor * sum((1 - m) ** t for t in 1..months)
+revenue         = customer_months * P' - move_cost
+score           = sum(revenue over segments) - baseline_revenue
+score_percent   = 100 * score / baseline_revenue
 ```
 
-Run three times per leaf with `eps` at the low, mid, and high end of the segment's range. Report `{low, mid, high}`. Never print a single confidence percentage.
+Definitions that remove all implementation freedom:
 
-Defaults with no data: B2B with switching costs −0.7 to −0.9; B2B without lock-in −1.0 to −1.3; consumer −1.5 to −2.0. Cross-price default +0.4. `move_cost` for `annual_discount` is the discount times the customers who take it (assume 30% uptake, editable).
+- `baseline_revenue` is the same formula evaluated at `P' = P`, `C' = C`, `move_cost = 0`, with the same monthly sum, summed over the same segments.
+- Revenue sums the decaying customer base month by month (the `customer_months` sum), never end-of-horizon customers times `months`.
+- `move_cost` is 0 for every move and counter except `annual_discount`.
+- Counter-move semantics: `hold` keeps `P'` at the moved price, cost 0. `partial_rollback` moves `P'` a fraction back toward the old price (default 50%, editable), cost 0. `annual_discount` keeps `P'` and its `move_cost` is the per-customer discount (default 10% of `P'` times `months`, editable) times the customers who take it (uptake 30% of the segment's `N`, editable), subtracted once per segment, not per month.
+- The price factor is capped at 1: a price advantage never invents customers beyond the organically surviving base. Upside from a competitor raising prices is a labeled v0 limitation ("competitor raises don't add customers"), not a silent model choice, because no acquisition mechanism exists in the model.
+- `score_percent` is computed separately for low, mid, and high, against the same `baseline_revenue`. If `baseline_revenue` is 0, display "n/a", never a division result.
 
-Every assumption is displayed next to the score and is editable. Editing reruns the script in the sandbox.
+Run three times per leaf with `eps` at the segment's `low`, `mid`, and `high` (see the elasticity range schema in Data shapes). Report `{low, mid, high}` in dollars and percent. Never print a single confidence percentage.
+
+Defaults with no data: B2B with switching costs -0.7 to -0.9; B2B without lock-in -1.0 to -1.3; consumer -1.5 to -2.0. Cross-price default +0.4. A user-supplied scalar elasticity `e` expands deterministically to `{low: e - 0.15, mid: e, high: e + 0.15}` (high clamped below 0).
+
+Every assumption is displayed next to the score and is editable, including the counter-move parameters above. Editing reruns the script in the sandbox.
 
 ## Recommendation
 
@@ -94,18 +110,25 @@ After every leaf is scored, the agent writes a verdict before proposing an actio
 
 1. Recommended path, one sentence, with its score band.
 2. Runner-up and why it lost.
-3. The assumption the answer is most sensitive to (found by rerunning the top two paths at the ends of their elasticity ranges).
+3. The assumption the answer is most sensitive to, read off the already-computed low and high bands of the top two paths - the assumption whose range end narrows or flips the ranking most; no extra reruns.
 4. What to watch after acting: a concrete trigger that would flip the recommendation ("Rival A below $42 within 30 days").
 
 The approval card carries the recommendation's first move. The watch trigger is stored with the decision and checked at the start of the next session.
 
 ## Provenance (Merkle tree)
 
-Every node carries `hash = sha256(canonical(content) + child hashes)`. Leaf content is the choice, reasoning, source URLs, assumptions, and score band. The root hash is written into the decision memo and the PR body.
+Every node carries `hash = sha256(canonical(content) + child hashes)`. Node content is every field of the node except `hash` itself (see the tree node schema in Data shapes). The root hash is written into the decision memo and the PR body.
 
-- Anyone can recompute the root from the stored tree; a mismatch means the tree or memo was edited after the decision.
-- What-if edits only recompute the subtree whose hashes changed; unchanged branches skip the sandbox.
-- Two runs with the same root reached the same conclusion from the same inputs. A different root means something changed, and a node-level diff shows what.
+`canonical()` is pinned so two implementations cannot disagree: JSON with lexicographically sorted keys (RFC 8785 style), UTF-8, floats rounded to 6 decimal places before serialization, `sources` sorted, segments sorted by id, child hashes concatenated in child-node-id order.
+
+What verification means, precisely:
+
+- Verification is always recompute-from-stored-content, never regeneration. Anyone can recompute the root from the stored tree; a mismatch means the tree or memo was edited after the decision.
+- The root identifies a run, not a function of business inputs. Regenerating a tree from the same company data is NOT expected to reproduce the root - subagent reasoning is not deterministic. What is guaranteed: recomputing hashes from a stored tree always reproduces its root.
+- Scrape and search results are persisted as snapshots (content digest + timestamp) alongside the tree, so the sources behind a decision are inspectable after the pages change.
+- What-if edits: sandbox rescoring covers only the affected leaves; hash recomputation runs from the changed node up through every ancestor to the root. Off-path nodes keep their hashes; the root always changes.
+
+What this does not protect against, stated honestly: an editor who regenerates the whole tree and updates the memo hash to match produces a consistent forgery. The scheme detects post-decision tampering with a stored trace, nothing more.
 
 Not a chain, not a ledger. Content-addressed provenance for the decision trace.
 
@@ -125,32 +148,107 @@ Nothing higher than 1 at depth two. The setting is a plain toggle in the convers
 
 v0 action: open a PR against the company's pricing repo (a small public repo you create today) that changes `pricing.yaml` and adds `decisions/2026-08-29-pro-price.md` with the winning branch, the scores, and the assumptions. Allow opens the PR through GitHub MCP. Deny writes the memo locally with the reason and opens nothing.
 
-Why this action: it's a real write to a real repo, it gets reviewed by Qodo on camera, and it turns a decision into a diff. If there's time, add "send the announcement" as a second gated action to a mock endpoint. Not before the PR path works.
+Why this action: it's a real write to a real repo, it turns a decision into a diff, and its Qodo review is shown on camera via the pre-staged prior-run PR from the Demo script (a live review takes minutes and never fits the window). If there's time, add "send the announcement" as a second gated action to a mock endpoint. Not before the PR path works.
 
-## Build order
+### Enforcement, by name
 
-Each step ends in a PR through Qodo. No direct pushes to main.
+Every refusal in this plan has an enforcing actor that is not the model's own judgment:
 
-1. **Repo and rails** — public repo, README skeleton, TrueForge running hello-world, Qodo installed, first PR merged. Nothing else counts until this exists.
-2. **Scorer** — `score.py` with tests. Run it in the sandbox from the orchestrator. This is the first thing a judge sees working.
-3. **Gather** — Bright Data MCP call from the orchestrator: scrape three competitor pricing pages, extract price. Log every call to the trace.
-4. **Company bootstrap** — scrape the company URL, draft `company.yaml`, show it in an editable box. File drop for CSV merges into segments.
-5. **Tree** — competitor subagents in parallel, forced-choice, then your counter menu, then score every leaf. Render the tree.
-6. **Gate** — pending action in the waiting column, Allow opens the PR via GitHub MCP, Deny logs. Film both.
-7. **Session** — reload the page and the tree and decision are still there. One more run remembers the last decision.
-8. **What-if** — click a node, type a competitor alternative, grow one branch.
+- **The gate service holds the GitHub write credential.** The orchestrator and subagents never see it. A PR opens only when the gate service receives an approval token minted by a human Allow click in the UI. No token, no write - regardless of what any model decides.
+- **`approve_action` over MCP is a request, not an authorization.** It queues the pending action and points at the approval card; the UI click remains the sole authorization event. An agent calling `approve_action` from Claude Desktop, Claude Code, or Codex cannot mint the token.
+- **The tool router enforces the allowlist.** Only Bright Data MCP, sandbox exec, and GitHub MCP are registered; any other tool request fails at the router and the refusal is traced.
+- **The orchestrator enforces the scrape budget.** A per-subagent counter is checked before dispatch; a second scrape request is refused and traced.
 
-Checkpoints: if step 5 isn't rendering a scored tree by 15:00, cut step 8 and demo with a fixed competitor response. If step 6 isn't opening a PR by 16:00, the gate writes the memo to the repo directly as the action. Video recording starts at 17:00 whatever the state.
+### Untrusted content boundary
+
+Scraped pages and search results are adversarial input. v0 controls:
+
+- The subagent context receives only structured facts extracted from a page (price as a number, competitor name as an escaped string). If a raw page excerpt is included for qualitative reasoning, it is wrapped in a per-session random boundary token that scraped content cannot predict; any occurrence of the token inside scraped text is stripped before wrapping, and the subagent is instructed to treat wrapped content strictly as data.
+- The decision memo and PR body are built from a typed template. Subagent reasoning renders inside fenced quote blocks, never interpolated into instructions, links, or the diff.
+- The demo runs against snapshot mirrors of competitor pages that the team controls, so nothing unvetted can appear on camera.
+
+## Slices
+
+The build is sliced for parallel agent work.
+One slice = one agent = one worktree = one branch = one PR.
+Work is tracked in `WORK.md` at the repo root - the single source of truth for slice status; GitHub issues are intentionally unused.
+
+**The merge gate, identical for every slice:** a tightly scoped adversarial review of the diff against this slice's AC (run by an independent agent, verdict recorded in WORK.md), plus Qodo's PR review with every High finding fixed or dismissed in-thread.
+A slice is done when both reviews pass and the PR is merged by a human.
+
+**S0 - Rails** (serial; everything else waits on it)
+Depends: nothing.
+AC: TrueForge runs hello-world, and hello-world exercises every extension surface the other slices plug into - it makes one MCP call, one sandbox exec, and emits trace events through a frozen trace-emit API; the tool router is in place with the three-tool allowlist and an automated test shows a request for a fake fourth tool is refused and traced; Qodo is installed and posts a review on the first PR; `contracts/` holds frozen JSON schemas plus fixtures for company, move, tree node, score result, trace event, pending action (approval card), recommendation, and competitor persona card, plus `contracts/jargon.json` (the jargon translation map) and one complete depth-two fixture tree with per-node hashes and a root minted by a throwaway reference script committed alongside it; `.env.example` lists every variable the rails need plus named placeholders for Bright Data and GitHub credentials (standing rule: any slice introducing a variable updates `.env.example` in the same PR); the first PR is merged.
+Features: Feature: Rails.
+
+**Wave 1 - fully parallel after S0. Each slice adds its own module against S0's frozen extension surfaces and `contracts/` fixtures; no Wave-1 slice touches a shared file.**
+
+**S1 - Scorer**
+Depends: S0.
+AC: `score.py` implements the Scoring section exactly (monthly-sum revenue, price factor capped at 1, baseline and move_cost definitions, counter semantics, scalar-to-range expansion, score_percent with the zero-baseline case); the deterministic Feature: Scorer scenarios (baseline zero, inelastic gain, elastic loss, undercut, cap, competitor raise, band, changed-assumption rerun) pass as automated tests; score.py runs in the sandbox on the fixture leaf and emits a trace event.
+Features: Feature: Scorer (the display half of assumption editing belongs to S6).
+
+**S2 - Provenance lib**
+Depends: S0.
+AC: `provenance.py` implements `canonical()` exactly as pinned in the Provenance section; recomputing S0's fixture tree reproduces its independently minted reference root; editing any node field changes the root; changing a node rehashes every ancestor and no off-path node; property tests cover float rounding and key ordering.
+Features: Feature: Provenance (hash and recompute scenarios; the memo and UI scenarios belong to S7).
+
+**S3 - Gather**
+Depends: S0.
+AC: three competitor pages scraped through Bright Data MCP with price extracted as a number; every call, URL, and extracted price in the trace; a failed parse yields "price unknown" plus the price from the `contracts/` company fixture as fallback, surfaced in the trace (S5 later swaps the source to the drafted file); every scrape persists a snapshot (content digest + timestamp) retrievable after the source changes, with one real gather run's snapshot and trace JSON committed as test evidence; the demo snapshot mirrors are committed under `mirrors/` with content digests and fetch timestamps; search_engine is called per competitor and up to three result URLs attach to its persona card.
+Features: Feature: Gather.
+
+**S4 - UI shell and widgets**
+Depends: S0.
+AC: chat-first page renders conversation plus trace panel (doing / waiting / did); company card, tree widget, approval card, and recommendation all render from `contracts/` fixtures with no backend; no YAML or field names visible outside advanced view; jargon translations are driven by `contracts/jargon.json` and tested against it.
+Features: Feature: Plain language (except the assistant-client scenario, which is stretch).
+
+**Wave 2**
+
+**S5 - Company bootstrap**
+Depends: S3, S4.
+AC: a typed sentence becomes `move.yaml` per Feature: Move, and questions or non-price moves are rejected without building a tree; a URL becomes a draft company summary in the editable card; CSV drop merges matching segments and surfaces unmatched rows; missing elasticity gets the labeled default range; a corrected number persists to the session store and survives reload.
+Features: Feature: Company bootstrap, Feature: Move.
+
+**S6 - Tree**
+Depends: S1, S2, S3.
+AC: one subagent per competitor in parallel, each a distinct trace actor; responses are forced-choice with numeric price_before/price_after per the fixed semantics, reasoning, and sources; scraped content reaches subagents only per the untrusted-content boundary, with an automated injection test; the C-prime convention is applied and displayed as an editable assumption; every leaf scored with bands in dollars and percent, and editing an assumption reruns the scorer and updates the display; every node hashed at creation and the root exposed; at most 36 leaves; the one-extra-scrape budget is enforced by the orchestrator's counter and a second request is refused and traced; interactive depth works as specified (depth 0 default with best-scoring counters, depth 1 pauses once, the setting asked in plain language and remembered); after scoring, the recommendation names the path, the runner-up, the most sensitive assumption read off the top two paths' bands, and a concrete watch trigger; the highest-mid-score path is highlighted and its first move queued as the pending action.
+Features: Feature: Tree, Feature: Interactive depth, Feature: Recommendation (except the next-session trigger check, owned by S8), Feature: Untrusted content (subagent scenario).
+
+**Wave 3**
+
+**S7 - Gate**
+Depends: S6, S4, S2.
+AC: pending action shows the diff, memo text, winning branch, and root hash with nothing written; the gate service holds the only write credential and refuses without a token minted by a human Allow click; `approve_action` over MCP queues but cannot authorize; Allow opens the PR with the `pricing.yaml` change plus memo, and both the memo and the PR body carry the root hash; the memo and PR are rendered from the typed template with reasoning in fenced quote blocks, with an automated injection test; Deny writes locally with the reason; after a Deny, selecting a different branch queues a new pending action and the denied one remains in did; the UI recomputes the root from the stored tree and flags a memo mismatch; both paths traced and filmed.
+Features: Feature: Gate, Feature: Untrusted content (memo/PR scenario), Feature: Provenance (memo, tamper-flag scenarios).
+
+**S8 - Session and watch trigger**
+Depends: S6.
+AC: reload restores tree, scores, and decision; a new move on the same plan surfaces the previous decision and its reason first; a stored watch trigger is re-checked at session start via a fresh scrape and reported before anything else.
+Features: Feature: Session, Feature: Recommendation (next-session trigger check).
+
+**S9 - What-if** (first to cut)
+Depends: S6, S2.
+AC: a typed competitor alternative grows one branch with generated counters and scores; only the new branch's leaves rescore in the sandbox; hashes recompute from the changed node through every ancestor to the root; every off-path node, including other existing branches under the same competitor, keeps its hash.
+Features: Feature: What-if, Feature: Provenance (what-if scope scenario).
+
+The MCP-server surface (`setup_company`, `evaluate_move`, `approve_action` from assistant clients) is a stretch outside every v0 slice's merge gate.
+
+**Checkpoints:** if S6 is not rendering a scored tree by 15:00, cut S9 and demo with a fixed competitor response.
+If S7 is not opening a PR by 16:00, the gate writes the memo to the repo directly as the action.
+A pre-staged, already-Qodo-reviewed PR from a prior run is prepared before filming (see Demo script).
+Video recording starts at 17:00 whatever the state.
 
 ## Demo script (3 minutes)
 
-0:00 — the move, typed as one sentence.
-0:20 — company summary appears from the URL; correct one number on camera.
-0:45 — trace shows Bright Data calls landing; competitor prices appear.
-1:15 — tree grows; click Rival A's branch; show the score band and the assumptions behind it.
-1:50 — change one elasticity; sandbox reruns; score moves.
-2:15 — the action lands in the waiting column: open PR with diff and memo. Deny it, with a reason. Then run the alternative branch and Allow. Show the PR and Qodo's review on it.
-2:50 — close on the decision trace: doing, waiting, did.
+0:00 - the move, typed as one sentence.
+0:20 - company summary appears from the URL; correct one number on camera.
+0:45 - trace shows Bright Data calls landing; competitor prices appear.
+1:15 - tree grows; click Rival A's branch; show the score band and the assumptions behind it.
+1:50 - change one elasticity; sandbox reruns; score moves.
+2:15 - the action lands in the waiting column: open PR with diff and memo. Deny it, with a reason. Then run the alternative branch and Allow; the PR opens on camera.
+2:40 - cut to a pre-staged PR from an earlier run with Qodo's completed review, labeled on camera as "a prior run's PR" - a live Qodo review takes minutes and never fits the window.
+2:50 - close on the decision trace: doing, waiting, did.
 
 ## Rules check
 
@@ -165,7 +263,7 @@ Checkpoints: if step 5 isn't rendering a scored tree by 15:00, cut step 8 and de
 
 # BDD scenarios
 
-Gherkin, one Feature per build step. Paste into `features/countermove.feature` or keep here for review.
+Gherkin, one Feature per slice or cross-cutting concern. Each slice's AC names its Features; they become automated tests inside that slice's PR.
 
 ```gherkin
 Feature: Rails
@@ -187,7 +285,7 @@ Feature: Rails
   Scenario: Only allowlisted tools are reachable
     Given the tool allowlist is Bright Data MCP, sandbox exec, GitHub MCP
     When the orchestrator or any subagent requests a tool outside the list
-    Then the request is refused
+    Then the tool router refuses the request
     And the refusal appears in the trace
 
 
@@ -214,20 +312,28 @@ Feature: Scorer
     When the move is price 49 to 59
     Then score is less than 0
 
-  Scenario: Competitor undercut reduces retention
+  Scenario: Competitor undercut reduces the price factor
     Given competitor average price 45 before and 39 after
     When the move is price 49 to 59
-    Then retention is lower than with competitor price unchanged
+    Then the price factor is lower than with competitor price unchanged
+    And the score band is lower
 
-  Scenario: Retention is clamped
+  Scenario: Price factor is capped at one
     Given own-price elasticity -0.1
     When the move is price 49 to 20
-    Then retention is at most 1.05
+    Then the price factor is at most 1
+    And customers never exceed the organically surviving base
+
+  Scenario: Competitor raise does not invent customers
+    Given competitor average price 45 before and 50 after
+    When the move is price 49 to 49
+    Then the price factor is at most 1
+    And score is 0
 
   Scenario: Score is a band, not a number
-    Given the segment's elasticity range is -1.0 to -1.3
+    Given the segment's measured elasticity -1.1 expands to low -1.25, mid -1.1, high -0.95
     When the leaf is scored
-    Then the result has low, mid, and high values
+    Then the result has low, mid, and high values in dollars and percent
     And no single confidence percentage is emitted
 
   Scenario: Scorer runs in the sandbox
@@ -235,11 +341,10 @@ Feature: Scorer
     Then score.py executes inside the TrueForge sandbox
     And the sandbox run appears in the trace with its inputs and outputs
 
-  Scenario: Editing an assumption reruns the scorer
-    Given a scored leaf is displayed
-    When the user changes own-price elasticity to -0.9
-    Then score.py reruns in the sandbox
-    And the displayed band updates
+  Scenario: Rerunning with a changed assumption produces a new band
+    Given a scored fixture leaf
+    When score.py reruns with own-price elasticity changed to -0.9
+    Then the emitted band reflects the new elasticity
 
 
 Feature: Gather
@@ -265,6 +370,12 @@ Feature: Gather
     Then search_engine is called through Bright Data MCP for that competitor
     And up to three result URLs are attached to the competitor's persona card
 
+  Scenario: Every scrape persists a snapshot
+    Given a competitor pricing URL
+    When the gather step scrapes it
+    Then a snapshot with content digest and timestamp is persisted with the session
+    And the snapshot is retrievable after the source page changes
+
 
 Feature: Company bootstrap
   The company summary is drafted from the public site and corrected by a human.
@@ -288,6 +399,11 @@ Feature: Company bootstrap
     When the company summary is confirmed
     Then the segment gets the B2B default range
     And the UI labels it "assumed, not measured"
+
+  Scenario: A corrected number survives reload
+    Given the user corrected a price on the company card
+    When the page is reloaded
+    Then the corrected value is displayed, not the drafted one
 
 
 Feature: Move
@@ -322,14 +438,27 @@ Feature: Tree
     Given a competitor subagent with a persona card
     When it responds to the move
     Then its choice is one of undercut, match, ignore, raise
+    And it carries numeric price_before and price_after computed by the fixed semantics
     And it includes a reasoning string
     And it lists the source URLs it used
+
+  Scenario: The C-prime convention is a visible assumption
+    Given a scored leaf
+    When it is displayed
+    Then the competitor-average convention appears as an editable assumption
+
+  Scenario: Editing an assumption reruns the scorer and updates the display
+    Given a scored leaf is displayed
+    When the user changes own-price elasticity to -0.9
+    Then score.py reruns in the sandbox
+    And the displayed band updates
 
   Scenario: Subagent may request one extra scrape
     Given a competitor subagent
     When it requests a scrape of a URL from its persona card
     Then the scrape runs through Bright Data MCP
-    And the subagent may not request a second one
+    And the orchestrator's scrape counter refuses any second request
+    And the refusal appears in the trace
 
   Scenario: Counter-moves come from the fixed menu
     Given a competitor response node
@@ -387,8 +516,15 @@ Feature: Gate
   Scenario: Agent cannot bypass the gate
     Given the orchestrator wants to open a PR
     When no human has clicked Allow
-    Then GitHub MCP write calls are refused
+    Then the gate service refuses the write because no approval token exists
     And the refusal appears in the trace
+
+  Scenario: approve_action without a human click does nothing
+    Given the MCP server is enabled and a pending action exists
+    When an assistant client calls approve_action
+    Then no approval token is minted
+    And no PR is opened
+    And the pending action stays in the waiting column
 
 
 Feature: Session
@@ -411,9 +547,11 @@ Feature: What-if
   Scenario: Grow one branch
     Given a competitor response node
     When the user types "what if Rival A cuts to $39"
-    Then a new competitor node is added with choice undercut and price 39
+    Then a new competitor node is added with choice undercut, price_before at the last scraped price, and price_after 39
+    And the node is marked as carrying an edited per-node price assumption overriding the 5% default
     And its counter-moves are generated and scored
-    And the rest of the tree is unchanged
+    And off-path nodes keep their content, scores, and hashes
+    And the changed node's ancestors up to the root get new hashes
 
 
 Feature: Rules
@@ -453,7 +591,7 @@ Feature: Plain language
 
   Scenario: Jargon is translated consistently
     When any of elasticity, cross-price elasticity, or monthly churn would be shown
-    Then the user sees "price sensitivity", "how closely customers watch competitors", or "customers who leave each month"
+    Then the user sees "price sensitivity", "how much your customers watch competitor prices", or "customers who leave each month"
     And the raw term appears only in the advanced view
 
   Scenario: Score reads as a sentence
@@ -473,11 +611,15 @@ Feature: Plain language
     When the user turns on advanced view
     Then raw values, ranges, and the scoring script are visible
 
+Feature: MCP surface (stretch - outside every v0 slice's merge gate)
+  The same flow from an assistant client, if time allows.
+
   Scenario: Same flow from an assistant client
     Given the MCP server is enabled
     When a user in Claude Desktop, Claude Code, or Codex calls setup_company, evaluate_move, and approve_action
     Then the same orchestrator runs on TrueForge
-    And approve_action does nothing until called by the human
+    And approve_action queues a request but cannot authorize the action
+    And only a human Allow click in the UI mints the approval token
 
 
 Feature: Recommendation
@@ -491,9 +633,10 @@ Feature: Recommendation
     And it names the runner-up and why it lost
 
   Scenario: Most sensitive assumption is named
-    Given the top two paths
-    When each is rerun at the ends of its price-sensitivity range
-    Then the recommendation names the assumption whose change moves the ranking most
+    Given the top two paths with their low, mid, and high bands
+    When their band ends are compared
+    Then the recommendation names the assumption whose range end narrows or flips the ranking most
+    And no extra scoring runs are performed
 
   Scenario: Watch trigger is concrete
     When the recommendation is shown
@@ -505,6 +648,22 @@ Feature: Recommendation
     When a new session starts
     Then the agent re-scrapes the trigger's competitor price
     And reports whether the trigger has fired before anything else
+
+
+Feature: Untrusted content
+  Scraped pages are adversarial input and cannot steer the agent or the PR.
+
+  Scenario: Injected page text cannot change a subagent's choice
+    Given a snapshot competitor page containing instruction-like text
+    When the subagent responds to the move
+    Then the page reaches the subagent only as structured facts or inside the session's random boundary token
+    And the subagent's tool calls are unchanged by the injected text
+
+  Scenario: Memo and PR render reasoning as quoted text
+    Given a winning branch whose reasoning contains markup or instruction-like text
+    When the memo and PR body are written
+    Then the reasoning appears only inside fenced quote blocks
+    And the pricing.yaml diff contains only the numeric price change
 
 
 Feature: Provenance
@@ -527,16 +686,17 @@ Feature: Provenance
     Then recomputing the root produces a different hash
     And the UI flags the memo as not matching the tree
 
-  Scenario: What-if recomputes only the changed subtree
+  Scenario: What-if rescoring and rehashing have different scopes
     Given a fully scored tree
     When the user grows one branch under Rival A
-    Then only nodes under Rival A are rescored in the sandbox
-    And every other node keeps its hash
+    Then only the new branch's leaves are rescored in the sandbox
+    And the changed branch and every ancestor up to the root get new hashes
+    And every off-path node, including other existing branches under Rival A, keeps its hash
 
-  Scenario: Same inputs give the same root
-    Given the same company data, competitor prices, and assumptions
-    When the tree is built twice
-    Then both roots are identical
+  Scenario: Recomputing a stored tree reproduces its root
+    Given a stored tree with its root hash
+    When the hashes are recomputed from the stored node content
+    Then the recomputed root equals the stored root
 
 
 Feature: Interactive depth
