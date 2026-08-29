@@ -15,11 +15,11 @@ Status values: `todo` / `in-progress` / `review` / `done` / `cut`.
 
 | Slice | Title | Wave | Depends | Status | Branch / PR | Adversarial review | Qodo |
 |---|---|---|---|---|---|---|---|
-| S0 | Rails | 0 | - | in-progress | main (bootstrap pushed) | - | installed; reviewed #9, #10 |
-| S1 | Scorer | 1 | S0 | review | s1-scorer / PR pending | pending | pending |
-| S2 | Provenance lib | 1 | S0 | todo | - | - | - |
+| S0 | Rails | 0 | - | review | s0b-rails / #16 | in progress | 2 findings open |
+| S1 | Scorer | 1 | S0 | done | #12 merged | FAIL then fixed, passed | Highs resolved |
+| S2 | Provenance lib | 1 | S0 | review | s2-provenance / #13 | FAIL then fixed, passed | Highs resolved |
 | S3 | Gather | 1 | S0 | todo | - | - | - |
-| S4 | UI shell and widgets | 1 | S0 | todo | - | - | - |
+| S4 | UI shell and widgets | 1 | S0 | review | s4-ui / #14 | FAIL then fixed, passed | pending |
 | S5 | Company bootstrap | 2 | S3, S4 | todo | - | - | - |
 | S6 | Tree | 2 | S1, S2, S3 | todo | - | - | - |
 | S7 | Gate | 3 | S6, S4, S2 | todo | - | - | - |
