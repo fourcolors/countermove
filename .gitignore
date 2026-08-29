@@ -1,0 +1,17 @@
+# Secrets - all tokens come from the environment, never the repo
+.env
+.env.*
+!.env.example
+
+# Session store (JSON on disk; recreated per run)
+sessions/
+
+# Local agent state
+.claude/
+
+# Language / tooling junk
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
