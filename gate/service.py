@@ -21,6 +21,7 @@ _VOLATILE_ACTION_FIELDS = {
     "_queued_action_digest",
     "local_memo_path",
     "pr_url",
+    "branch",
     "status",
 }
 
@@ -163,6 +164,7 @@ class GateService:
         url = self.repo_client.open_pr(title, memo)
         action["status"] = "approved"
         action["pr_url"] = url
+        action["branch"] = branch
         emit(
             self.session,
             "gate",
@@ -183,21 +185,31 @@ class GateService:
             None,
         )
         if action is None:
-            self._refuse(action_id, "the action is not waiting for a decision")
+            emit(
+                self.session,
+                "gate",
+                "did",
+                "A decline arrived for an already-decided request.",
+                detail={
+                    "action_id": action_id,
+                    "reason": "the action is not waiting for a decision",
+                },
+            )
+            raise GateRefused("the action is not waiting for a decision")
         if not isinstance(reason, str) or not reason.strip():
-            self._refuse(action_id, "a denial reason is required")
+            raise GateRefused("a denial reason is required")
         source = action.get("_gate_source")
         move = source.get("move") if isinstance(source, Mapping) else None
         if not isinstance(move, Mapping):
-            self._refuse(action_id, "the stored move is missing")
+            raise GateRefused("the stored move is missing")
         plan = move.get("plan")
         effective = move.get("effective")
         if not isinstance(plan, str) or not isinstance(effective, str):
-            self._refuse(action_id, "the stored move is invalid")
+            raise GateRefused("the stored move is invalid")
         try:
             memo_path = _memo_path(plan, effective)
         except ValueError:
-            self._refuse(action_id, "the stored move has an invalid effective date")
+            raise GateRefused("the stored move has an invalid effective date")
 
         # The session owner may pin its directory through _session_dir.  The
         # fallback is explicit and retained in the session for later reloads.
@@ -208,7 +220,7 @@ class GateService:
         try:
             local_path.relative_to(session_dir)
         except ValueError:
-            self._refuse(action_id, "the generated decision memo path escaped the session")
+            raise GateRefused("the generated decision memo path escaped the session")
         local_path.parent.mkdir(parents=True, exist_ok=True)
         ticks = "`" * max(3, max((len(x) for x in re.findall(r"`+", reason)), default=0) + 1)
         denied_memo = (

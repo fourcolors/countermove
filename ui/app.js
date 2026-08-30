@@ -51,9 +51,9 @@ const money = (value) => new Intl.NumberFormat("en-US", {
 }).format(value);
 
 function roundedPercentNumber(value) {
-  // Display precision only: one decimal, trailing .0 dropped ("+6%", "+7.7%").
+  // Display precision only: always one decimal ("+5.0%", "+7.7%").
   const rounded = Math.round(Math.abs(Number(value)) * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return rounded.toFixed(1);
 }
 
 function signedPercent(value) {
@@ -106,6 +106,29 @@ function pathDescription(pathId) {
   if (!match) return humanize(pathId);
   const competitor = match[1].replace("rival-", "Rival ").toUpperCase().replace("RIVAL", "Rival");
   return `${humanize(match[3])} if ${competitor} chooses to ${humanize(match[2]).toLowerCase()}`;
+}
+
+function runnerUpLabel(pathId) {
+  const match = pathId && String(pathId).match(/^leaf-(rival-[abc])-(undercut|match|ignore|raise)-(hold|partial_rollback|annual_discount)$/);
+  if (!match) return humanize(pathId || "the runner-up");
+  const competitor = match[1].replace("rival-", "Rival ").toUpperCase().replace("RIVAL", "Rival");
+  const choiceVerb = { undercut: "undercuts", match: "matches", ignore: "ignores", raise: "raises" }[match[2]] || match[2];
+  const counter = match[3].replaceAll("_", " ");
+  return `${counter} after ${competitor} ${choiceVerb}`;
+}
+
+function runnerUpSentence(recommendation) {
+  const label = runnerUpLabel(recommendation.runner_up_id);
+  const winnerPct = recommendation.band && recommendation.band.mid_pct;
+  const nodes = state.data && state.data.tree && state.data.tree.nodes;
+  const runnerNode = Array.isArray(nodes) ? nodes.find((node) => node.id === recommendation.runner_up_id) : null;
+  const runnerPct = runnerNode && runnerNode.score && runnerNode.score.mid_pct;
+  const havePercents = winnerPct !== null && winnerPct !== undefined && !Number.isNaN(Number(winnerPct))
+    && runnerPct !== null && runnerPct !== undefined && !Number.isNaN(Number(runnerPct));
+  if (havePercents) {
+    return `The next-best option is ${label}, at ${signedPercent(runnerPct)} versus ${signedPercent(winnerPct)} for the recommended path.`;
+  }
+  return `The next-best option is ${label}.`;
 }
 
 function el(tag, className, text) {
@@ -787,7 +810,8 @@ function renderRecommendation(recommendation, jargon) {
   runner.lastElementChild.append(
     el("h3", "", "Next-best option"),
     el("strong", "runner-up-path", pathDescription(recommendation.runner_up_id)),
-    el("p", "", recommendation.runner_up_reason),
+    el("p", "", runnerUpSentence(recommendation)),
+    el("p", "advanced-only", recommendation.runner_up_reason),
   );
   const sensitivity = el("article", "recommendation-detail");
   sensitivity.append(el("span", "detail-icon", "↔"), el("div", "", ""));
@@ -809,17 +833,7 @@ function renderRecommendation(recommendation, jargon) {
   content.append(panel);
 }
 
-function renderApproval(action, move, company) {
-  const content = createMessage("Nothing changes unless you approve it. Here is the exact change I’m ready to open for review.");
-  const card = el("section", "approval-card widget");
-  card.setAttribute("aria-labelledby", "approval-title");
-  const flag = el("div", "approval-flag");
-  flag.append(el("span", "approval-dot"), el("span", "", "Your approval needed"));
-  card.append(flag);
-  const title = el("h2", "approval-title", action.sentence);
-  title.id = "approval-title";
-  card.append(title);
-
+function approvalChangeSummary(action, move, company) {
   const change = el("div", "change-summary");
   const changeHeading = el("div", "change-heading");
   const filename = action.diff.match(/^--- a\/(.+)$/m)?.[1] || action.diff.match(/^\+\+\+ b\/(.+)$/m)?.[1] || "";
@@ -833,38 +847,127 @@ function renderApproval(action, move, company) {
   after.append(el("span", "diff-sign", "+"), el("span", "", `${planName} monthly price`), el("strong", "", money(move.to)));
   visualDiff.append(before, after);
   change.append(changeHeading, visualDiff);
-  card.append(change);
+  return change;
+}
 
-  const rawDiff = el("details", "advanced-only raw-diff");
-  rawDiff.append(el("summary", "", "View file diff"));
-  rawDiff.append(el("pre", "", action.diff));
-  card.append(rawDiff);
-
-  const actions = el("div", "approval-actions");
-  const approve = el("button", "button button-primary", "Approve");
-  approve.type = "button";
-  const notNow = el("button", "button button-secondary", "Not now");
-  notNow.type = "button";
-  approve.addEventListener("click", () => gateCall("/gate/allow", action.id, approve));
-  notNow.addEventListener("click", () => {
-    const reason = window.prompt("Why not now? (recorded with the decision)", "holding until next month");
-    if (reason !== null) gateCall("/gate/deny", action.id, notNow, reason);
-  });
-  actions.append(approve, notNow);
-  card.append(actions);
-
+function approvalRaw(action) {
   const raw = el("div", "advanced-only raw-block");
   raw.append(
     advancedDetail("winning_branch_id", action.winning_branch_id),
     advancedDetail("root_hash", action.root_hash),
     advancedDetail("status", action.status),
   );
-  card.append(raw);
+  return raw;
+}
+
+function approvalBranchName(action) {
+  if (action.branch) return action.branch;
+  const url = action.pr_url;
+  if (typeof url === "string" && url.startsWith("local://pull/")) return url.slice("local://pull/".length);
+  return "";
+}
+
+function bindWaitingActions(actions, action) {
+  const approve = el("button", "button button-primary", "Approve");
+  approve.type = "button";
+  const notNow = el("button", "button button-secondary", "Not now");
+  notNow.type = "button";
+  approve.addEventListener("click", () => gateCall("/gate/allow", action.id, approve));
+  notNow.addEventListener("click", () => {
+    const form = el("div", "approval-actions deny-form");
+    const input = el("input", "field-input");
+    input.type = "text";
+    input.value = "holding until next month";
+    input.setAttribute("aria-label", "Reason for declining");
+    const confirmDecline = el("button", "button button-primary", "Confirm decline");
+    confirmDecline.type = "button";
+    const cancel = el("button", "button button-secondary", "Cancel");
+    cancel.type = "button";
+    confirmDecline.addEventListener("click", () => {
+      const reason = input.value.trim() || "holding until next month";
+      gateCall("/gate/deny", action.id, confirmDecline, reason);
+    });
+    cancel.addEventListener("click", () => form.replaceWith(actions));
+    form.append(input, confirmDecline, cancel);
+    actions.replaceWith(form);
+  });
+  actions.replaceChildren(approve, notNow);
+}
+
+function renderApproval(action, move, company) {
+  document.querySelectorAll(".approval-card").forEach((card) => {
+    const message = card.closest(".message");
+    if (message) message.remove();
+    else card.remove();
+  });
+  const status = action && action.status;
+  const intro = status === "approved"
+    ? "The change request is open."
+    : status === "denied"
+      ? "This request was declined."
+      : "Nothing changes unless you approve it. Here is the exact change I’m ready to open for review.";
+  const content = createMessage(intro);
+  const card = el("section", "approval-card widget");
+  card.dataset.actionId = action.id;
+  card.setAttribute("aria-labelledby", "approval-title");
+
+  if (status === "approved") {
+    card.classList.add("approved");
+    const flag = el("div", "approval-flag");
+    flag.append(el("span", "approval-dot"), el("span", "", "Approved"));
+    card.append(flag);
+    const title = el("h2", "approval-title", "Change request opened");
+    title.id = "approval-title";
+    card.append(title);
+    card.append(approvalChangeSummary(action, move, company));
+    const branch = approvalBranchName(action);
+    if (branch) card.append(el("p", "approval-branch", `Branch ${branch}`));
+    else if (action.pr_url) card.append(el("p", "approval-branch", action.pr_url));
+    const rawDiff = el("details", "advanced-only raw-diff");
+    rawDiff.append(el("summary", "", "View file diff"));
+    rawDiff.append(el("pre", "", action.diff));
+    card.append(rawDiff, approvalRaw(action));
+  } else if (status === "denied") {
+    card.classList.add("denied");
+    const flag = el("div", "approval-flag");
+    flag.append(el("span", "approval-dot"), el("span", "", "Declined"));
+    card.append(flag);
+    const title = el("h2", "approval-title", "Change request declined");
+    title.id = "approval-title";
+    card.append(title);
+    card.append(approvalChangeSummary(action, move, company));
+    if (action.deny_reason) card.append(el("p", "deny-reason", `Reason: ${action.deny_reason}`));
+    card.append(el("p", "approval-hint", "Running a new simulation queues a fresh request."));
+    const rawDiff = el("details", "advanced-only raw-diff");
+    rawDiff.append(el("summary", "", "View file diff"));
+    rawDiff.append(el("pre", "", action.diff));
+    card.append(rawDiff, approvalRaw(action));
+  } else {
+    const flag = el("div", "approval-flag");
+    flag.append(el("span", "approval-dot"), el("span", "", "Your approval needed"));
+    card.append(flag);
+    const title = el("h2", "approval-title", action.sentence);
+    title.id = "approval-title";
+    card.append(title);
+    card.append(approvalChangeSummary(action, move, company));
+    const rawDiff = el("details", "advanced-only raw-diff");
+    rawDiff.append(el("summary", "", "View file diff"));
+    rawDiff.append(el("pre", "", action.diff));
+    card.append(rawDiff);
+    const actions = el("div", "approval-actions");
+    bindWaitingActions(actions, action);
+    card.append(actions, approvalRaw(action));
+  }
+
   content.append(card);
+  const host = document.querySelector("#approval-host");
+  const message = content.closest(".message");
+  if (host && message) host.replaceChildren(message);
 }
 
 function renderTrace(events) {
   const grid = document.querySelector("#trace-grid");
+  grid.replaceChildren();
   const columns = [
     { id: "doing", label: "Doing", empty: "Nothing in progress" },
     { id: "waiting", label: "Waiting", empty: "Nothing waiting" },
@@ -903,6 +1006,8 @@ function render(data) {
   }
   const feed = document.querySelector("#conversation-feed");
   feed.replaceChildren();
+  const traceGrid = document.querySelector("#trace-grid");
+  if (traceGrid) traceGrid.replaceChildren();
   const advancedToggle = document.querySelector('[data-control="advanced-toggle"]');
   const advancedToggleId = fixtureDomId(data.pendingAction.id, "advanced-toggle");
   advancedToggle.id = advancedToggleId;
@@ -921,6 +1026,9 @@ function render(data) {
   renderRecommendation(data.recommendation, data.jargon);
   renderDecisionGraph(data.tree, data.recommendation, data.jargon);
   if (hasTree(data.tree)) renderTree(data.tree, data.jargon);
+  const approvalHost = el("div", "");
+  approvalHost.id = "approval-host";
+  feed.append(approvalHost);
   renderApproval(data.pendingAction, data.move, data.company);
   renderTrace(data.traceEvents);
   renderComposer();
@@ -945,6 +1053,7 @@ function renderComposer() {
     button.disabled = true;
     input.disabled = true;
     button.textContent = "Simulating";
+    document.querySelectorAll(".approval-card button").forEach((btn) => { btn.disabled = true; });
     const status = el("p", "composer-status",
       "Checking competitor pages, mapping responses, and scoring every path - a few seconds.");
     form.after(status);
@@ -968,6 +1077,7 @@ function renderComposer() {
         button.disabled = false;
         input.disabled = false;
         button.textContent = "Simulate";
+        document.querySelectorAll(".approval-card button").forEach((btn) => { btn.disabled = false; });
         input.focus();
         return;
       }
@@ -980,6 +1090,7 @@ function renderComposer() {
       button.disabled = false;
       input.disabled = false;
       button.textContent = "Simulate";
+      document.querySelectorAll(".approval-card button").forEach((btn) => { btn.disabled = false; });
     }
   });
   feed.append(form);
@@ -1003,6 +1114,20 @@ async function loadFixtures() {
   return Object.fromEntries(entries);
 }
 
+function showGateNotice(button, text) {
+  const card = button && button.closest && button.closest(".approval-card");
+  if (!card) return;
+  card.querySelector(".gate-notice")?.remove();
+  const notice = el("div", "gate-notice");
+  notice.setAttribute("role", "alert");
+  notice.append(el("p", "", text));
+  const dismiss = el("button", "button button-secondary", "Dismiss");
+  dismiss.type = "button";
+  dismiss.addEventListener("click", () => notice.remove());
+  notice.append(dismiss);
+  card.append(notice);
+}
+
 async function gateCall(path, actionId, button, reason) {
   button.disabled = true;
   const original = button.textContent;
@@ -1014,7 +1139,10 @@ async function gateCall(path, actionId, button, reason) {
       body: JSON.stringify(reason === undefined ? { action_id: actionId } : { action_id: actionId, reason }),
     });
     const body = await response.json();
-    if (!body.ok) throw new Error(body.error || "gate refused");
+    if (!body.ok) {
+      showGateNotice(button, "That request was already decided - run a new simulation.");
+      throw new Error(body.error || "gate refused");
+    }
     const data = await loadData();
     render(data);
   } catch (error) {
