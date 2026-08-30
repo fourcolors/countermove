@@ -52,7 +52,26 @@ class Handler(SimpleHTTPRequestHandler):
             return
         return super().do_GET()
 
+    ALLOWED_ORIGINS = {"http://localhost:8420", "http://127.0.0.1:8420"}
+
+    def _reject(self, code, message):
+        data = json.dumps({"ok": False, "error": message}).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
+        # The gate endpoint accepts only same-origin browser JSON posts:
+        # a cross-origin page cannot mint-and-consume an approval in one shot.
+        origin = self.headers.get("Origin", "")
+        if origin not in self.ALLOWED_ORIGINS:
+            self._reject(403, "gate requests must come from the Countermove page itself")
+            return
+        if not (self.headers.get("Content-Type", "").startswith("application/json")):
+            self._reject(415, "gate requests must be application/json")
+            return
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length) or b"{}")
         store = SessionStore(str(SESSION_DIR))
