@@ -2,6 +2,7 @@
 
 import csv
 import io
+import math
 import re
 
 REQUIRED_COLUMNS = ("segment", "customers", "monthly_churn")
@@ -58,23 +59,27 @@ def _parse_rows(csv_text):
         return [], problems
 
     handle = io.StringIO(csv_text)
+    reader = csv.reader(handle, strict=True)
     try:
-        reader = csv.DictReader(handle)
+        header = next(reader)
+    except StopIteration:
+        problems.append("the CSV has no header row")
+        return [], problems
     except csv.Error as exc:
         problems.append("the CSV could not be read: %s" % exc)
         return [], problems
 
-    if not reader.fieldnames:
+    if not header or not any(str(name).strip() for name in header):
         problems.append("the CSV has no header row")
         return [], problems
 
     header_map = {}
-    for name in reader.fieldnames:
+    for index, name in enumerate(header):
         if name is None:
             continue
         key = _norm_header(name)
         if key:
-            header_map[key] = name
+            header_map[key] = index
     missing = [column for column in REQUIRED_COLUMNS if column not in header_map]
     if missing:
         problems.append(
@@ -83,41 +88,43 @@ def _parse_rows(csv_text):
         )
         return [], problems
 
+    expected_width = len(header)
     rows = []
-    for line_number, raw in enumerate(reader, start=2):
-        if raw is None:
-            problems.append("line %s is malformed" % line_number)
-            continue
-        if _row_blank(raw):
-            continue
-        if None in raw:
-            problems.append(
-                "line %s has more fields than the header"
-                % line_number
+    line_number = 2
+    try:
+        for line_number, fields in enumerate(reader, start=2):
+            if _fields_blank(fields):
+                continue
+            if len(fields) != expected_width:
+                problems.append(
+                    "line %s has %s fields; expected %s"
+                    % (line_number, len(fields), expected_width)
+                )
+                continue
+            segment = fields[header_map["segment"]]
+            customers_raw = fields[header_map["customers"]]
+            churn_raw = fields[header_map["monthly_churn"]]
+            segment_id = (segment or "").strip()
+            if not segment_id:
+                problems.append("line %s is missing a segment id" % line_number)
+                continue
+            customers, customers_error = _parse_customers(customers_raw)
+            if customers_error:
+                problems.append("line %s: %s" % (line_number, customers_error))
+                continue
+            churn, churn_error = _parse_churn(churn_raw)
+            if churn_error:
+                problems.append("line %s: %s" % (line_number, churn_error))
+                continue
+            rows.append(
+                {
+                    "segment": segment_id,
+                    "customers": customers,
+                    "monthly_churn": churn,
+                }
             )
-            continue
-        segment = raw.get(header_map["segment"])
-        customers_raw = raw.get(header_map["customers"])
-        churn_raw = raw.get(header_map["monthly_churn"])
-        segment_id = (segment or "").strip()
-        if not segment_id:
-            problems.append("line %s is missing a segment id" % line_number)
-            continue
-        customers, customers_error = _parse_customers(customers_raw)
-        if customers_error:
-            problems.append("line %s: %s" % (line_number, customers_error))
-            continue
-        churn, churn_error = _parse_churn(churn_raw)
-        if churn_error:
-            problems.append("line %s: %s" % (line_number, churn_error))
-            continue
-        rows.append(
-            {
-                "segment": segment_id,
-                "customers": customers,
-                "monthly_churn": churn,
-            }
-        )
+    except csv.Error as exc:
+        problems.append("line %s is malformed: %s" % (line_number, exc))
     return rows, problems
 
 
@@ -132,9 +139,8 @@ def _norm_header(name):
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
 
 
-def _row_blank(raw):
-    values = [value for value in raw.values() if value is not None]
-    return not any(str(value).strip() for value in values)
+def _fields_blank(fields):
+    return not any(str(value).strip() for value in fields)
 
 
 def _parse_customers(raw):
@@ -143,9 +149,9 @@ def _parse_customers(raw):
     text = str(raw).strip().replace(",", "")
     try:
         number = float(text)
-    except ValueError:
+    except (ValueError, OverflowError):
         return None, "customers %r is not a number" % raw
-    if number != number or number < 0:
+    if not math.isfinite(number) or number < 0:
         return None, "customers %r is not a valid count" % raw
     if number == int(number):
         return int(number), None
@@ -158,9 +164,9 @@ def _parse_churn(raw):
     text = str(raw).strip()
     try:
         number = float(text)
-    except ValueError:
+    except (ValueError, OverflowError):
         return None, "monthly_churn %r is not a number" % raw
-    if number != number or number < 0 or number > 1:
+    if not math.isfinite(number) or number < 0 or number > 1:
         return None, "monthly_churn %r must be a fraction between 0 and 1" % raw
     return number, None
 

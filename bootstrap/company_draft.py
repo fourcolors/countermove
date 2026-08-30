@@ -158,7 +158,7 @@ def draft_company(url, client, router, session):
         session,
         "orchestrator",
         "did",
-        "added the three known competitors with their listed prices",
+        "competitors and prices from the demo fixture (assumed)",
         detail={"competitors": copy.deepcopy(competitors)},
     )
 
@@ -169,7 +169,10 @@ def draft_company(url, client, router, session):
 def _known_competitors():
     with _FIXTURE_PATH.open(encoding="utf-8") as handle:
         fixture = json.load(handle)
-    return copy.deepcopy(fixture["competitors"])
+    competitors = copy.deepcopy(fixture["competitors"])
+    for competitor in competitors:
+        competitor["assumed"] = True
+    return competitors
 
 
 def _extract_name(content):

@@ -6,10 +6,14 @@ that is not on the company is refused rather than invented.
 """
 
 from datetime import date, datetime, timedelta
+import math
 import re
 
 DEFAULT_EFFECTIVE_DAYS = 9
 ACTION = "open_pr"
+
+_RAISE_VERBS = frozenset({"raise", "increase", "hike"})
+_LOWER_VERBS = frozenset({"cut", "lower", "drop", "reduce", "decrease"})
 
 _WEEKDAYS = {
     "monday": 0,
@@ -106,7 +110,11 @@ _OUT_OF_SCOPE_REPLY = (
 
 
 class Rejection:
-    """Typed refusal. kind is 'question', 'out_of_scope', or 'unknown_plan'."""
+    """Typed refusal. Never an executable move.
+
+    kind is one of: question, out_of_scope, unknown_plan, invalid_price,
+    invalid_date.
+    """
 
     def __init__(self, kind, reply):
         self.kind = kind
@@ -132,15 +140,25 @@ def parse_move(text, company, today=None):
     if _is_question(stripped):
         return Rejection("question", _QUESTION_REPLY)
 
+    verb_match = _PRICE_VERB.search(stripped)
     from_price, to_price = _prices(stripped)
     plan = _named_plan(stripped, company)
 
-    if _PRICE_VERB.search(stripped) and to_price is not None:
+    if verb_match and to_price is not None:
         if plan is None:
             return _unknown_plan(stripped, company)
         if from_price is None:
             from_price = _as_number(plan["price"])
-        effective = _effective_date(stripped, today)
+        invalid = _invalid_prices(verb_match.group(1), from_price, to_price, plan)
+        if invalid is not None:
+            return invalid
+        try:
+            effective = _effective_date(stripped, today)
+        except ValueError:
+            return Rejection(
+                "invalid_date",
+                "I could not read that date. Use a real calendar date, like 2026-09-07.",
+            )
         return {
             "plan": plan["id"],
             "from": from_price,
@@ -149,7 +167,7 @@ def parse_move(text, company, today=None):
             "effective": effective.isoformat(),
         }
 
-    if _PRICE_VERB.search(stripped):
+    if verb_match:
         return Rejection("question", _QUESTION_REPLY)
 
     return Rejection("out_of_scope", _OUT_OF_SCOPE_REPLY)
@@ -204,6 +222,53 @@ def _mentioned_plan_token(text):
     return token
 
 
+def _invalid_prices(verb, from_price, to_price, plan):
+    """Return a typed rejection for an illegal price pair, or None if the pair is usable."""
+    if not _positive_price(from_price) or not _positive_price(to_price):
+        return Rejection(
+            "invalid_price",
+            "Prices must be greater than zero.",
+        )
+    current = _as_number(plan["price"])
+    if from_price != current:
+        return Rejection(
+            "invalid_price",
+            "The %s plan is currently $%s, not $%s. Use the current price as the from amount."
+            % (plan["id"], _shown_price(current), _shown_price(from_price)),
+        )
+    if from_price == to_price:
+        return Rejection(
+            "invalid_price",
+            "That is not a price change; from and to are the same.",
+        )
+    lowered = verb.lower()
+    if lowered in _RAISE_VERBS and to_price < from_price:
+        return Rejection(
+            "invalid_price",
+            "Raise means the new price is higher, not lower.",
+        )
+    if lowered in _LOWER_VERBS and to_price > from_price:
+        return Rejection(
+            "invalid_price",
+            "Lower means the new price is lower, not higher.",
+        )
+    return None
+
+
+def _positive_price(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return math.isfinite(number) and number > 0
+
+
+def _shown_price(price):
+    if price == int(price):
+        return str(int(price))
+    return str(price)
+
+
 def _unknown_plan(text, company):
     names = []
     for plan in company.get("plans") or []:
@@ -240,7 +305,10 @@ def _effective_date(text, today):
         return _next_weekday(today_date, weekday.group(1))
     iso = _ISO_DATE.search(text)
     if iso:
-        return date.fromisoformat(iso.group(1))
+        try:
+            return date.fromisoformat(iso.group(1))
+        except ValueError:
+            raise ValueError("invalid date: %s" % iso.group(1))
     month_day = _MONTH_DAY.search(text)
     if month_day:
         month = _MONTHS[month_day.group(1).lower()]
@@ -249,12 +317,12 @@ def _effective_date(text, today):
         try:
             resolved = date(year, month, day)
         except ValueError:
-            return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
+            raise ValueError("invalid date")
         if month_day.group(3) is None and resolved < today_date:
             try:
                 resolved = date(year + 1, month, day)
             except ValueError:
-                return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
+                raise ValueError("invalid date")
         return resolved
     return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
 

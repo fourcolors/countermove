@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 from bootstrap import (
     ACME_SITE_URL,
@@ -39,6 +40,16 @@ def load_company():
 def load_move():
     with MOVE_FIXTURE.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def submit_sentence(text, company, today=None):
+    """The product path: parse first, and only a valid move reaches the builder."""
+    import tree.build as tree_build
+
+    parsed = parse_move(text, company, today=today)
+    if isinstance(parsed, Rejection):
+        return parsed
+    return tree_build.build_tree(company, parsed)
 
 
 class TestParseMove(unittest.TestCase):
@@ -91,30 +102,88 @@ class TestParseMove(unittest.TestCase):
         )
         self.assertEqual(move["effective"], "2026-08-29")
 
+    def test_raise_from_59_to_49_is_rejected(self):
+        result = parse_move(
+            "Raise Pro from $59 to $49",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertNotEqual(getattr(result, "action", None), "open_pr")
+
+    def test_lower_from_49_to_59_is_rejected(self):
+        result = parse_move(
+            "Lower Pro from $49 to $59",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_price")
+
+    def test_from_equals_to_is_rejected(self):
+        result = parse_move(
+            "Raise Pro from $49 to $49",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_price")
+
+    def test_non_positive_price_is_rejected(self):
+        result = parse_move(
+            "Raise Pro from $49 to $0",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_price")
+
+    def test_from_not_matching_current_plan_price_is_rejected(self):
+        result = parse_move(
+            "Raise Pro from $1 to $59",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_price")
+        self.assertIn("currently $49", result.reply)
+
+    def test_invalid_iso_date_is_a_typed_rejection(self):
+        result = parse_move(
+            "Raise Pro from $49 to $59 on 2026-02-30",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_date")
+
+    def test_invalid_month_day_is_a_typed_rejection(self):
+        result = parse_move(
+            "Raise Pro from $49 to $59 on Feb 30",
+            load_company(),
+            today=date(2026, 8, 29),
+        )
+        self.assertIsInstance(result, Rejection)
+        self.assertEqual(result.kind, "invalid_date")
+
     def test_question_is_rejected_and_does_not_touch_a_tree(self):
         company = load_company()
-        tree = {"nodes": [{"id": "root", "children": ["a"]}]}
         snapshot_company = copy.deepcopy(company)
-        snapshot_tree = copy.deepcopy(tree)
         result = parse_move("Should I raise prices?", company)
         self.assertIsInstance(result, Rejection)
         self.assertEqual(result.kind, "question")
         self.assertIn("specific", result.reply.lower())
         self.assertNotIn("tree", result.reply.lower())
         self.assertEqual(company, snapshot_company)
-        self.assertEqual(tree, snapshot_tree)
 
     def test_out_of_scope_is_rejected_and_does_not_touch_a_tree(self):
         company = load_company()
-        tree = {"nodes": [{"id": "root"}]}
         snapshot_company = copy.deepcopy(company)
-        snapshot_tree = copy.deepcopy(tree)
         result = parse_move("Launch a new onboarding flow", company)
         self.assertIsInstance(result, Rejection)
         self.assertEqual(result.kind, "out_of_scope")
         self.assertIn("price", result.reply.lower())
         self.assertEqual(company, snapshot_company)
-        self.assertEqual(tree, snapshot_tree)
 
     def test_unknown_plan_is_not_guessed(self):
         result = parse_move(
@@ -156,6 +225,8 @@ class TestDraftCompany(unittest.TestCase):
             [item["price"] for item in company["competitors"]],
             [45, 52, 47],
         )
+        for competitor in company["competitors"]:
+            self.assertIs(competitor["assumed"], True)
 
     def test_missing_elasticity_gets_labeled_b2b_default(self):
         session = new_session()
@@ -205,7 +276,8 @@ class TestDraftCompany(unittest.TestCase):
         self.assertIn("company website", texts)
         self.assertIn("pro", texts)
         self.assertIn("assumed, not measured", texts)
-        self.assertIn("competitors", texts)
+        self.assertIn("competitors and prices from the demo fixture (assumed)", texts)
+        self.assertNotIn("listed prices", texts)
         self.assertNotIn("elasticity", texts)
         self.assertNotIn("yaml", texts)
 
@@ -280,6 +352,74 @@ class TestMergeCsv(unittest.TestCase):
         )
         self.assertEqual(unmatched, [])
         self.assertEqual(company["plans"][0]["segments"][0]["customers"], 301)
+
+    def test_malformed_quoting_probe_is_rejected(self):
+        company = load_company()
+        snapshot = copy.deepcopy(company)
+        csv_text = 'segment,customers,monthly_churn\n"sm"b",310,0.05\n'
+        with self.assertRaises(CsvMergeError) as ctx:
+            merge_csv(company, csv_text)
+        message = str(ctx.exception).lower()
+        self.assertIn("rejected", message)
+        self.assertEqual(company, snapshot)
+        ids = [
+            segment["id"]
+            for plan in company["plans"]
+            for segment in plan["segments"]
+        ]
+        self.assertEqual(ids, ["smb", "mid"])
+        self.assertEqual(company["plans"][0]["segments"][0]["customers"], 300)
+
+    def test_non_finite_customers_are_rejected(self):
+        for value in ("inf", "nan", "Infinity", "-inf"):
+            company = load_company()
+            snapshot = copy.deepcopy(company)
+            csv_text = "segment,customers,monthly_churn\nsmb,%s,0.05\n" % value
+            with self.assertRaises(CsvMergeError) as ctx:
+                merge_csv(company, csv_text)
+            self.assertIn("rejected", str(ctx.exception).lower())
+            self.assertEqual(company, snapshot)
+
+    def test_churn_above_one_is_rejected(self):
+        company = load_company()
+        snapshot = copy.deepcopy(company)
+        csv_text = "segment,customers,monthly_churn\nsmb,310,1.5\n"
+        with self.assertRaises(CsvMergeError) as ctx:
+            merge_csv(company, csv_text)
+        self.assertIn("rejected", str(ctx.exception).lower())
+        self.assertEqual(company, snapshot)
+
+
+class TestNoTreeIsBuilt(unittest.TestCase):
+    def _assert_builder_never_called(self, text):
+        company = load_company()
+
+        def boom(*args, **kwargs):
+            raise AssertionError("tree builder must not be called for a rejection")
+
+        with mock.patch("tree.build.build_tree", side_effect=boom) as builder:
+            result = submit_sentence(text, company, today=date(2026, 8, 29))
+        self.assertIsInstance(result, Rejection)
+        builder.assert_not_called()
+        return result
+
+    def test_question_does_not_call_the_tree_builder(self):
+        result = self._assert_builder_never_called("Should I raise prices?")
+        self.assertEqual(result.kind, "question")
+
+    def test_non_price_move_does_not_call_the_tree_builder(self):
+        result = self._assert_builder_never_called("Launch a new onboarding flow")
+        self.assertEqual(result.kind, "out_of_scope")
+
+    def test_empty_input_does_not_call_the_tree_builder(self):
+        result = self._assert_builder_never_called("")
+        self.assertEqual(result.kind, "question")
+
+    def test_unknown_plan_does_not_call_the_tree_builder(self):
+        result = self._assert_builder_never_called(
+            "Raise Enterprise from $99 to $129"
+        )
+        self.assertEqual(result.kind, "unknown_plan")
 
 
 if __name__ == "__main__":
