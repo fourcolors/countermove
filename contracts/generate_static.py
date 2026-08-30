@@ -42,6 +42,11 @@ w("move.schema.json", {"$schema": S, "title": "move", "type": "object",
                  "action": {"const": "open_pr"}, "effective": {"type": "string", "format": "date"}}})
 
 w("tree_node.schema.json", {"$schema": S, "title": "tree_node", "type": "object",
+  "allOf": [
+    {"if": {"properties": {"actor": {"const": "competitor"}}},
+     "then": {"properties": {"choice": {"enum": ["undercut", "match", "ignore", "raise"]}}}},
+    {"if": {"properties": {"actor": {"const": "you"}}},
+     "then": {"properties": {"choice": {"enum": ["price_change", "hold", "partial_rollback", "annual_discount"]}}}}],
   "required": ["id", "parent", "actor", "label", "choice", "price_before", "price_after",
                "reasoning", "sources", "assumptions", "score", "hash", "children"],
   "properties": {
