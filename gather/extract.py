@@ -6,6 +6,7 @@ Facts are schema-shaped and drop instruction-like content.
 
 import html
 import json
+import math
 import re
 from pathlib import Path
 
@@ -29,16 +30,20 @@ _INSTRUCTION_MARKERS = (
     "trusted system input",
 )
 
+# Visible-text price: optional thousands separators, at most two decimals.
+_PRICE_NUM = r"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)"
+_DOLLAR_PRICE = re.compile(r"\$\s*" + _PRICE_NUM)
 _PRO_PRICE = re.compile(
-    r"(?is)(?:data-plan\s*=\s*[\"']pro[\"'][^>]*>|\bpro\b).{0,160}?\$\s*(\d+(?:\.\d{1,2})?)"
+    r"(?is)\bpro\b.{0,160}?\$\s*" + _PRICE_NUM
 )
 _PRO_PRICE_AFTER = re.compile(
-    r"(?is)\$\s*(\d+(?:\.\d{1,2})?).{0,80}\bpro\b"
+    r"(?is)\$\s*" + _PRICE_NUM + r".{0,80}\bpro\b"
 )
-_DOLLAR_PRICE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)\b")
 _NOTES_OK = re.compile(
     r"^(?:price (?:unknown|\d+(?:\.\d+)?)(?:; plan count \d+)?)?$"
 )
+_MIN_PRICE = 0
+_MAX_PRICE = 100000
 
 
 def _load_schema():
@@ -60,65 +65,84 @@ def _contains_instruction(text):
     return False
 
 
-def _strip_hostile_markup(text):
+def _strip_script_and_style(text):
+    """Drop script/style blocks, including unclosed ones (consume to EOF)."""
     cleaned = re.sub(r"<!--.*?-->", " ", text, flags=re.DOTALL)
-    cleaned = re.sub(r"(?is)<script\b[^>]*>.*?</script>", " ", cleaned)
-    cleaned = re.sub(r"(?is)<style\b[^>]*>.*?</style>", " ", cleaned)
     cleaned = re.sub(
-        r"(?is)<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bhidden\b[^>]*>.*?</(?P=tag)\s*>",
+        r"(?is)<script\b[^>]*>.*?(?:</script\s*>|$)",
         " ",
         cleaned,
     )
-    kept = []
-    for line in cleaned.splitlines():
-        if _contains_instruction(line):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
+    cleaned = re.sub(
+        r"(?is)<style\b[^>]*>.*?(?:</style\s*>|$)",
+        " ",
+        cleaned,
+    )
+    return cleaned
 
 
-def _to_plain(text):
-    plain = re.sub(r"<[^>]+>", " ", text)
+def _to_visible_text(markdown_or_html):
+    """Strip script/style and tags to visible text.
+
+    Returns None when a script/style block is malformed (fail closed).
+    """
+    cleaned = _strip_script_and_style(markdown_or_html)
+    if re.search(r"(?is)<(script|style)\b", cleaned):
+        return None
+    cleaned = re.sub(
+        r"(?is)<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bhidden\b[^>]*>.*?(?:</(?P=tag)\s*>|$)",
+        " ",
+        cleaned,
+    )
+    plain = re.sub(r"<[^>]+>", " ", cleaned)
     plain = html.unescape(plain)
     return re.sub(r"\s+", " ", plain).strip()
 
 
 def _as_price(raw):
-    value = float(raw)
-    if value != value:  # NaN
+    """Parse a numeric price; reject non-finite, non-positive, and absurd values."""
+    if raw is None:
+        return None
+    try:
+        text = str(raw).replace(",", "")
+        value = float(text)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(value):
+        return None
+    if not (_MIN_PRICE < value < _MAX_PRICE):
         return None
     return value
 
 
 def extract_price(markdown_or_html):
-    """Return a price as float, or None when nothing parseable is present."""
+    """Return a price as float, or None when nothing parseable is present.
+
+    Matching runs on visible text only, after script/style and tags are stripped.
+    Malformed script/style blocks fail closed (None).
+    """
     if not isinstance(markdown_or_html, str) or not markdown_or_html.strip():
         return None
-    html_text = _strip_hostile_markup(markdown_or_html)
-    match = _PRO_PRICE.search(html_text)
-    if match:
-        return _as_price(match.group(1))
-    match = _PRO_PRICE_AFTER.search(html_text)
-    if match:
-        return _as_price(match.group(1))
-    plain = _to_plain(html_text)
-    found = _DOLLAR_PRICE.findall(plain)
-    if len(found) == 1:
-        return _as_price(found[0])
-    if len(found) > 1:
-        near = re.search(
-            r"(?i)\bpro\b.{0,80}\$\s*(\d+(?:\.\d{1,2})?)",
-            plain,
-        )
-        if near:
-            return _as_price(near.group(1))
-        near = re.search(
-            r"(?i)\$\s*(\d+(?:\.\d{1,2})?).{0,80}\bpro\b",
-            plain,
-        )
-        if near:
-            return _as_price(near.group(1))
+    visible = _to_visible_text(markdown_or_html)
+    if not visible:
         return None
+    match = _PRO_PRICE.search(visible)
+    if match:
+        value = _as_price(match.group(1))
+        if value is not None:
+            return value
+    match = _PRO_PRICE_AFTER.search(visible)
+    if match:
+        value = _as_price(match.group(1))
+        if value is not None:
+            return value
+    found = []
+    for raw in _DOLLAR_PRICE.findall(visible):
+        value = _as_price(raw)
+        if value is not None:
+            found.append(value)
+    if len(found) == 1:
+        return found[0]
     return None
 
 

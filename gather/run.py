@@ -8,7 +8,7 @@ from pathlib import Path
 from orchestrator.tool_router import ToolRouter
 from orchestrator.trace import emit
 
-from .extract import extract_facts, extract_price, validate_persona_card
+from .extract import extract_facts, validate_persona_card
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FIXTURE_PATH = _REPO_ROOT / "contracts" / "fixtures" / "company.json"
@@ -55,6 +55,22 @@ def _clip_news_urls(result):
     return urls
 
 
+def _snapshot_store(session):
+    snaps = session.get("snapshots")
+    if not isinstance(snaps, dict):
+        snaps = {}
+        session["snapshots"] = snaps
+    return snaps
+
+
+def _persist_snapshot(session, url, content):
+    """Store scraped bytes content-addressed by sha256 digest."""
+    snaps = _snapshot_store(session)
+    digest = _sha256_text(content)
+    snaps[digest] = {"url": url, "ts": _now(), "content": content}
+    return digest
+
+
 def gather(session, company, client, router):
     """Scrape each competitor through the router and return persona cards.
 
@@ -76,8 +92,7 @@ def gather(session, company, client, router):
     router.register("brightdata.scrape_as_markdown", scrape_as_markdown)
     router.register("brightdata.search_engine", search_engine)
 
-    if session.get("snapshots") is None:
-        session["snapshots"] = []
+    _snapshot_store(session)
 
     cards = []
     for competitor in company.get("competitors") or []:
@@ -96,12 +111,10 @@ def gather(session, company, client, router):
         if not isinstance(content, str):
             content = "" if content is None else str(content)
 
-        digest = _sha256_text(content)
-        snapshot = {"url": url, "digest": digest, "ts": _now()}
-        session["snapshots"].append(snapshot)
+        _persist_snapshot(session, url, content)
 
-        price = extract_price(content)
         facts = extract_facts(content, competitor=name)
+        price = facts["price"]
         price_unknown = price is None
         if price_unknown:
             price = _fallback_price(competitor)
@@ -120,9 +133,7 @@ def gather(session, company, client, router):
                 },
             )
         else:
-            notes = facts.get("notes") or ("price %s" % (
-                str(int(price)) if price == int(price) else str(price)
-            ))
+            notes = facts["notes"]
             emit(
                 session,
                 "orchestrator",
@@ -152,7 +163,7 @@ def gather(session, company, client, router):
         )
 
         card = {
-            "competitor": name,
+            "competitor": facts["competitor"],
             "price": price,
             "pricing_url": url,
             "news_urls": news_urls,
