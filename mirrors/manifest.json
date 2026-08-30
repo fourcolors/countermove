@@ -1,0 +1,22 @@
+{
+  "pages": [
+    {
+      "file": "rival-a.html",
+      "url": "https://rival-a.example/pricing",
+      "sha256": "0fee2a667ff2b808f2bcc751b5da0f23126e07f5a39690f47c3489d9eaf0a5d1",
+      "fetched_at": "<fetch-timestamp>"
+    },
+    {
+      "file": "rival-b.html",
+      "url": "https://rival-b.example/pricing",
+      "sha256": "369a89d7740de7da2bcbfe9851d51603c02569fd31e264f85ad81822a568e12c",
+      "fetched_at": "<fetch-timestamp>"
+    },
+    {
+      "file": "rival-c.html",
+      "url": "https://rival-c.example/pricing",
+      "sha256": "073401f75eb1adf3969968971d7dbfc0e86f33ca1049d584cd74f01fb2682ae8",
+      "fetched_at": "<fetch-timestamp>"
+    }
+  ]
+}
