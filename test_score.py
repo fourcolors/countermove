@@ -145,9 +145,11 @@ class FeatureScorerTests(unittest.TestCase):
     def test_counter_move_defaults(self):
         partial = score.counter_terms(move(), leaf(choice="partial_rollback"), 300, 6)
         discount = score.counter_terms(move(), leaf(choice="annual_discount"), 300, 6)
-        self.assertEqual(partial, (54.0, 0.0))
+        self.assertEqual(partial[:2], (54.0, 0.0))
+        self.assertEqual(partial[2], {"choice": "partial_rollback", "rollback_fraction": 0.5})
         self.assertEqual(discount[0], 59.0)
         self.assertAlmostEqual(discount[1], 3186.0)
+        self.assertEqual(discount[2], {"choice": "annual_discount", "discount_rate": 0.1, "uptake": 0.3})
 
     def test_monthly_sum_not_end_of_horizon_times_months(self):
         monthly_sum = score.surviving_customer_months(300, 0.04, 6)
@@ -157,3 +159,17 @@ class FeatureScorerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QodoRegressionTests(unittest.TestCase):
+    def test_counter_parameters_are_displayed(self):
+        rollback = score.score_leaf(company(), move(), leaf(choice="partial_rollback"))
+        self.assertEqual(rollback["assumptions"]["counter"],
+                         {"choice": "partial_rollback", "rollback_fraction": 0.5})
+        discount = score.score_leaf(company(), move(), leaf(choice="annual_discount"))
+        self.assertEqual(discount["assumptions"]["counter"],
+                         {"choice": "annual_discount", "discount_rate": 0.1, "uptake": 0.3})
+
+    def test_zero_resulting_price_raises_not_crashes(self):
+        with self.assertRaises(ValueError):
+            score.price_factor(49, 0, 45, 45, -1.1, 0.4)

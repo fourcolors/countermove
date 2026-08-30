@@ -62,8 +62,8 @@ def price_factor(
     """Calculate demand retention, capped so price advantages add no customers."""
     if current_price <= 0 or competitor_price <= 0:
         raise ValueError("current and competitor prices must be greater than zero")
-    if resulting_price < 0 or competitor_price_after < 0:
-        raise ValueError("resulting prices cannot be negative")
+    if resulting_price <= 0 or competitor_price_after <= 0:
+        raise ValueError("prices must be strictly positive")
     factor = ((resulting_price / current_price) ** elasticity) * (
         (competitor_price_after / competitor_price) ** cross_elasticity
     )
@@ -85,8 +85,8 @@ def _number(source: Mapping[str, Any], names: Sequence[str], default: float) -> 
     return default
 
 
-def counter_terms(move: Mapping[str, Any], leaf: Mapping[str, Any], customers: float, months: int) -> tuple[float, float]:
-    """Return resulting own price and the once-per-segment counter cost."""
+def counter_terms(move: Mapping[str, Any], leaf: Mapping[str, Any], customers: float, months: int) -> tuple[float, float, dict]:
+    """Return resulting own price, once-per-segment cost, and resolved parameters."""
     assumptions = leaf.get("assumptions") or {}
     counter_assumptions = assumptions.get("counter") or {}
     if not isinstance(counter_assumptions, Mapping):
@@ -96,7 +96,7 @@ def counter_terms(move: Mapping[str, Any], leaf: Mapping[str, Any], customers: f
     old_price = float(move["from"])
     moved_price = float(move["to"])
     if choice == "hold":
-        return moved_price, 0.0
+        return moved_price, 0.0, {"choice": choice}
     if choice == "partial_rollback":
         fraction = _number(
             counter_assumptions,
@@ -105,7 +105,8 @@ def counter_terms(move: Mapping[str, Any], leaf: Mapping[str, Any], customers: f
         )
         if not 0 <= fraction <= 1:
             raise ValueError("rollback fraction must be between zero and one")
-        return moved_price + fraction * (old_price - moved_price), 0.0
+        return (moved_price + fraction * (old_price - moved_price), 0.0,
+                {"choice": choice, "rollback_fraction": fraction})
     if choice == "annual_discount":
         rate = _number(
             counter_assumptions,
@@ -120,7 +121,7 @@ def counter_terms(move: Mapping[str, Any], leaf: Mapping[str, Any], customers: f
         if rate < 0 or not 0 <= uptake <= 1:
             raise ValueError("discount rate must be nonnegative and uptake between zero and one")
         cost = (rate * moved_price * months) * (uptake * customers)
-        return moved_price, cost
+        return moved_price, cost, {"choice": choice, "discount_rate": rate, "uptake": uptake}
     raise ValueError(f"unsupported counter choice: {choice!r}")
 
 
@@ -223,7 +224,7 @@ def score_leaf(company: Mapping[str, Any], move: Mapping[str, Any], leaf: Mappin
         ranges[segment_id] = eps
         organic_customer_months = surviving_customer_months(customers, churn, months)
         baseline_revenue += organic_customer_months * current_price
-        resulting_price, move_cost = counter_terms(move, leaf, customers, months)
+        resulting_price, move_cost, counter_params = counter_terms(move, leaf, customers, months)
         for band in BANDS:
             factor = price_factor(current_price, resulting_price, c, c_prime, eps[band], eta)
             totals[band] += organic_customer_months * factor * resulting_price - move_cost
@@ -237,7 +238,7 @@ def score_leaf(company: Mapping[str, Any], move: Mapping[str, Any], leaf: Mappin
         "competitor_average_before": c,
         "competitor_average_after": c_prime,
         "months": months,
-        "counter": leaf.get("choice", "hold"),
+        "counter": counter_params,
     }
     result: dict[str, Any] = {"leaf_id": str(leaf["id"])}
     for band in BANDS:
