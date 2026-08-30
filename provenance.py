@@ -185,9 +185,23 @@ def verify_tree(tree: Mapping[str, Any]) -> dict[str, Any]:
             return digest
 
         recomputed_root = recompute(root_id)
-        # Recompute disconnected nodes too: verification promises every node.
+        # The root must commit to every node: an unreachable node is a
+        # structural failure, not a benign extra, or a post-decision edit
+        # could add self-consistent nodes without changing the root.
+        reachable = set(computed)
         for node_id in sorted(by_id):
-            recompute(node_id)
+            if node_id not in reachable:
+                mismatches.append(f"unreachable: {node_id}")
+                recompute(node_id)
+        # Ancestry must be consistent: each child's stored parent is the
+        # node that lists it, and the root has no parent.
+        for node_id, node in by_id.items():
+            for child_id in node.get("children", []):
+                child = by_id.get(child_id)
+                if child is not None and child.get("parent") != node_id:
+                    mismatches.append(f"parent-mismatch: {child_id}")
+        if by_id[root_id].get("parent") is not None:
+            mismatches.append("root-has-parent")
         if stored_root_hash != recomputed_root:
             mismatches.append("root_hash")
     except (KeyError, TypeError, ValueError) as exc:

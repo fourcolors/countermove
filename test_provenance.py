@@ -183,3 +183,37 @@ class PropertyTests(unittest.TestCase):
         for bad in (float("nan"), float("inf"), float("-inf")):
             with self.assertRaises(ValueError):
                 canonical({"x": bad})
+
+
+class StructuralIntegrityTests(unittest.TestCase):
+    def setUp(self):
+        self.tree = json.loads(json.dumps(load_json("contracts/fixtures/tree.json")))
+
+    def test_unreachable_self_consistent_node_fails_verification(self):
+        stray_content = {"id": "stray", "parent": None, "actor": "you", "label": "x",
+                         "choice": "hold", "price_before": 1.0, "price_after": 1.0,
+                         "reasoning": "r", "sources": [], "assumptions": {}, "score": None}
+        stray = dict(stray_content)
+        stray["children"] = []
+        stray["hash"] = node_hash(stray, {})
+        self.tree["nodes"].append(stray)
+        result = verify_tree(self.tree)
+        self.assertFalse(result["ok"])
+        self.assertTrue(any(m.startswith("unreachable") for m in result["mismatches"]))
+
+    def test_contradictory_parent_link_fails_verification(self):
+        for node in self.tree["nodes"]:
+            if node["parent"] == "root":
+                node["parent"] = "leaf-rival-c-raise-hold"
+                break
+        result = verify_tree(self.tree)
+        self.assertFalse(result["ok"])
+        self.assertTrue(any(m.startswith("parent-mismatch") for m in result["mismatches"]))
+
+    def test_root_with_parent_fails_verification(self):
+        for node in self.tree["nodes"]:
+            if node["id"] == "root":
+                node["parent"] = "leaf-rival-a-ignore-hold"
+        result = verify_tree(self.tree)
+        self.assertFalse(result["ok"])
+        self.assertIn("root-has-parent", result["mismatches"])
