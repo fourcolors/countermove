@@ -19,17 +19,16 @@ const state = {
 };
 
 const humanize = (value) => ({
-  pro: "Pro",
   smb: "Small businesses",
   mid: "Mid-sized businesses",
   undercut: "Offer a lower price",
   match: "Match your price",
   ignore: "Keep their price",
   raise: "Raise their price",
-  hold: "Keep $59",
+  hold: "Keep current price",
   partial_rollback: "Move partway back",
   annual_discount: "Offer an annual discount",
-}[value] || value.replaceAll("_", " "));
+}[value] || value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
 
 const money = (value) => new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -44,20 +43,35 @@ function signedPercent(value) {
   return `${sign}${Math.abs(number)}%`;
 }
 
+function signedPercentValue(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
+  const number = Number(value);
+  const sign = number > 0 ? "+" : number < 0 ? "−" : "";
+  return `${sign}${Math.abs(number)}`;
+}
+
 function scoreSentence(score, jargon) {
-  return `${jargon.score_band.plain}: ${signedPercent(score.mid_pct)} (between ${signedPercent(score.low_pct)} and ${signedPercent(score.high_pct)})`;
+  const values = {
+    mid_pct: signedPercentValue(score.mid_pct),
+    low_pct: signedPercentValue(score.low_pct),
+    high_pct: signedPercentValue(score.high_pct),
+  };
+  const band = jargon.score_band.format.replace(/\{(mid_pct|low_pct|high_pct)\}/g, (_token, key) => values[key]);
+  return `${jargon.score_band.plain}: ${band}`;
 }
 
-function priceSensitivity(range) {
-  if (range.high > -0.9) return "low";
-  if (range.high >= -1.3) return "medium";
-  return "high";
+function priceSensitivity(mid, elasticity) {
+  const [low, medium, high] = Object.keys(elasticity.levels);
+  if (mid > elasticity.thresholds.medium_min) return low;
+  if (mid < elasticity.thresholds.high_max) return high;
+  return medium;
 }
 
-function competitorAttention(value) {
-  if (value < 0.3) return "a little";
-  if (value <= 0.6) return "some";
-  return "a lot";
+function competitorAttention(value, crossElasticity) {
+  const [little, some, lot] = Object.keys(crossElasticity.levels);
+  if (value >= crossElasticity.thresholds.a_lot_min) return lot;
+  if (value >= crossElasticity.thresholds.some_min) return some;
+  return little;
 }
 
 function pathDescription(pathId) {
@@ -72,6 +86,10 @@ function el(tag, className, text) {
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
+}
+
+function fixtureDomId(...parts) {
+  return parts.join("-").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 function advancedDetail(label, value) {
@@ -96,6 +114,15 @@ function renderUserMessage(move) {
   document.querySelector("#conversation-feed").append(article);
 }
 
+function renderWebsiteMessage(company) {
+  const website = `https://${fixtureDomId(company.name)}.example`;
+  const article = el("article", "message message-user");
+  const content = el("div", "message-content");
+  content.append(el("p", "message-copy", website));
+  article.append(content, el("div", "avatar avatar-user", "You"));
+  document.querySelector("#conversation-feed").append(article);
+}
+
 function renderCompany(company, jargon) {
   const content = createMessage(`I found ${company.name}. Here’s the business picture I used. You can review each field before we act.`);
   const card = el("section", "company-card widget");
@@ -112,16 +139,22 @@ function renderCompany(company, jargon) {
   company.plans.forEach((plan) => {
     const planRow = el("div", "plan-row");
     const planName = el("label", "field-group");
+    const planNameId = fixtureDomId(company.name, plan.id, "plan-name");
+    planName.htmlFor = planNameId;
     planName.append(el("span", "field-label", "Plan"));
     const planInput = el("input", "field-input");
+    planInput.id = planNameId;
+    planInput.name = planNameId;
     planInput.value = humanize(plan.id);
-    planInput.setAttribute("aria-label", "Plan name");
     planName.append(planInput);
     const price = el("label", "field-group field-price");
+    const priceId = fixtureDomId(company.name, plan.id, "monthly-price");
+    price.htmlFor = priceId;
     price.append(el("span", "field-label", "Monthly price"));
     const priceInput = el("input", "field-input");
+    priceInput.id = priceId;
+    priceInput.name = priceId;
     priceInput.value = money(plan.price);
-    priceInput.setAttribute("aria-label", "Monthly price");
     price.append(priceInput);
     planRow.append(planName, price);
     card.append(planRow);
@@ -135,11 +168,12 @@ function renderCompany(company, jargon) {
 
       const facts = el("div", "plain-facts");
       const sensitivity = el("div", "plain-fact");
-      sensitivity.append(el("span", "fact-label", jargon.elasticity.plain), el("strong", `level level-${priceSensitivity(segment.elasticity)}`, priceSensitivity(segment.elasticity)));
+      const sensitivityLevel = priceSensitivity(segment.elasticity.mid, jargon.elasticity);
+      sensitivity.append(el("span", "fact-label", jargon.elasticity.plain), el("strong", `level level-${sensitivityLevel}`, sensitivityLevel));
       const churn = el("div", "plain-fact");
       churn.append(el("span", "fact-label", jargon.monthly_churn.plain), el("strong", "", `${Math.round(segment.monthly_churn * 100)}%`));
       const attention = el("div", "plain-fact");
-      attention.append(el("span", "fact-label", jargon.cross_elasticity.plain), el("strong", "", competitorAttention(segment.cross_elasticity)));
+      attention.append(el("span", "fact-label", jargon.cross_elasticity.plain), el("strong", "", competitorAttention(segment.cross_elasticity, jargon.cross_elasticity)));
       facts.append(sensitivity, churn, attention);
       item.append(facts);
 
@@ -161,10 +195,14 @@ function renderCompany(company, jargon) {
   company.competitors.forEach((competitor) => {
     const item = el("div", "competitor");
     item.append(el("span", "competitor-name", competitor.name), el("strong", "competitor-price", money(competitor.price)));
+    const inputId = fixtureDomId(company.name, competitor.name, "pricing-page");
+    const label = el("label", "sr-only", `${competitor.name} pricing page`);
+    label.htmlFor = inputId;
     const input = el("input", "competitor-url");
+    input.id = inputId;
+    input.name = inputId;
     input.value = competitor.url;
-    input.setAttribute("aria-label", `${competitor.name} pricing page`);
-    item.append(input);
+    item.append(label, input);
     list.append(item);
   });
   competitors.append(list);
@@ -173,9 +211,10 @@ function renderCompany(company, jargon) {
 }
 
 function renderTree(tree, jargon) {
-  const content = createMessage("I mapped 12 ways competitors could respond. Open any response to compare your three choices, then select a choice to see its likely result.");
   const nodes = new Map(tree.nodes.map((node) => [node.id, node]));
   const root = nodes.get("root") || tree.nodes.find((node) => node.parent === null);
+  const competitorResponses = tree.nodes.filter((node) => node.actor === "competitor");
+  const content = createMessage(`I mapped ${competitorResponses.length} ways competitors could respond. Open any response to compare your three choices, then select a choice to see its likely result.`);
   const widget = el("section", "tree-widget widget");
   widget.setAttribute("aria-labelledby", "tree-title");
 
@@ -183,7 +222,7 @@ function renderTree(tree, jargon) {
   const titleWrap = el("div");
   titleWrap.append(el("span", "widget-label", "Response map"), el("h2", "widget-title", "How the market might move"));
   titleWrap.querySelector("h2").id = "tree-title";
-  heading.append(titleWrap, el("span", "node-count", `${root.children.length} responses`));
+  heading.append(titleWrap, el("span", "node-count", `${competitorResponses.length} responses`));
   widget.append(heading);
 
   const move = el("div", "root-move");
@@ -191,8 +230,7 @@ function renderTree(tree, jargon) {
   move.append(advancedDetail("root hash", root.hash));
   widget.append(move);
 
-  const grouped = root.children.reduce((groups, nodeId) => {
-    const node = nodes.get(nodeId);
+  const grouped = competitorResponses.reduce((groups, node) => {
     const name = node.label.split(":")[0];
     if (!groups.has(name)) groups.set(name, []);
     groups.get(name).push(node);
@@ -203,7 +241,7 @@ function renderTree(tree, jargon) {
   grouped.forEach((responses, competitor) => {
     const group = el("section", "response-group");
     const groupHeading = el("div", "response-group-heading");
-    groupHeading.append(el("h3", "", competitor), el("span", "", "4 possible responses"));
+    groupHeading.append(el("h3", "", competitor), el("span", "", `${responses.length} possible responses`));
     group.append(groupHeading);
 
     const responseList = el("div", "response-list");
@@ -212,7 +250,9 @@ function renderTree(tree, jargon) {
       const summary = el("summary", "response-summary");
       const summaryCopy = el("span", "response-copy");
       summaryCopy.append(el("strong", "", humanize(response.choice)), el("span", "", `${money(response.price_before)} → ${money(response.price_after)}`));
-      summary.append(summaryCopy, el("span", "expand-glyph", "+"));
+      const glyph = el("span", "expand-glyph", "+");
+      glyph.setAttribute("aria-hidden", "true");
+      summary.append(summaryCopy, glyph);
       details.append(summary);
 
       const leaves = el("div", "leaf-list");
@@ -293,7 +333,7 @@ function renderRecommendation(recommendation, jargon) {
   );
   const sensitivity = el("article", "recommendation-detail");
   sensitivity.append(el("span", "detail-icon", "↔"), el("div", "", ""));
-  sensitivity.lastElementChild.append(el("h3", "", "How steady is this?"), el("p", "", recommendation.sensitivity.statement.replace("price-sensitivity", "price sensitivity").replace("sensitivity-ranked", "ranked by sensitivity")));
+  sensitivity.lastElementChild.append(el("h3", "", "How steady is this?"), el("p", "", recommendation.sensitivity.statement.replace("price-sensitivity", jargon.elasticity.plain).replace("sensitivity-ranked", "ranked by sensitivity")));
   const watch = el("article", "recommendation-detail watch-detail");
   watch.append(el("span", "detail-icon", "◇"), el("div", "", ""));
   watch.lastElementChild.append(el("h3", "", "What to watch"), el("p", "", recommendation.watch_trigger.statement));
@@ -311,7 +351,7 @@ function renderRecommendation(recommendation, jargon) {
   content.append(panel);
 }
 
-function renderApproval(action) {
+function renderApproval(action, move, company) {
   const content = createMessage("Nothing changes unless you approve it. Here is the exact change I’m ready to open for review.");
   const card = el("section", "approval-card widget");
   card.setAttribute("aria-labelledby", "approval-title");
@@ -324,12 +364,15 @@ function renderApproval(action) {
 
   const change = el("div", "change-summary");
   const changeHeading = el("div", "change-heading");
-  changeHeading.append(el("span", "", "Proposed change"), el("span", "file-name", "pricing.yaml"));
+  const filename = action.diff.match(/^--- a\/(.+)$/m)?.[1] || action.diff.match(/^\+\+\+ b\/(.+)$/m)?.[1] || "";
+  const plan = company.plans.find((candidate) => candidate.id === move.plan);
+  const planName = humanize(plan?.id || move.plan);
+  changeHeading.append(el("span", "", "Proposed change"), el("span", "file-name", filename));
   const visualDiff = el("div", "visual-diff");
   const before = el("div", "diff-line removed");
-  before.append(el("span", "diff-sign", "−"), el("span", "", "Pro monthly price"), el("strong", "", "$49"));
+  before.append(el("span", "diff-sign", "−"), el("span", "", `${planName} monthly price`), el("strong", "", money(move.from)));
   const after = el("div", "diff-line added");
-  after.append(el("span", "diff-sign", "+"), el("span", "", "Pro monthly price"), el("strong", "", "$59"));
+  after.append(el("span", "diff-sign", "+"), el("span", "", `${planName} monthly price`), el("strong", "", money(move.to)));
   visualDiff.append(before, after);
   change.append(changeHeading, visualDiff);
   card.append(change);
@@ -386,19 +429,26 @@ function renderTrace(events) {
 function applyAdvancedMode(enabled) {
   state.advanced = enabled;
   document.documentElement.classList.toggle("advanced", enabled);
-  document.querySelector("#advanced-toggle").setAttribute("aria-checked", String(enabled));
+  document.querySelector(".advanced-toggle input").setAttribute("aria-checked", String(enabled));
 }
 
 function render(data) {
   state.data = data;
   const feed = document.querySelector("#conversation-feed");
   feed.replaceChildren();
+  const advancedToggle = document.querySelector('[data-control="advanced-toggle"]');
+  const advancedToggleId = fixtureDomId(data.pendingAction.id, "advanced-toggle");
+  advancedToggle.id = advancedToggleId;
+  advancedToggle.name = advancedToggleId;
+  advancedToggle.closest("label").htmlFor = advancedToggleId;
+  createMessage("What is your company website?");
+  renderWebsiteMessage(data.company);
+  renderCompany(data.company, data.jargon);
   createMessage("What change are you considering?");
   renderUserMessage(data.move);
-  renderCompany(data.company, data.jargon);
   renderTree(data.tree, data.jargon);
   renderRecommendation(data.recommendation, data.jargon);
-  renderApproval(data.pendingAction);
+  renderApproval(data.pendingAction, data.move, data.company);
   renderTrace(data.traceEvents);
 }
 
@@ -420,5 +470,5 @@ async function loadFixtures() {
   return Object.fromEntries(entries);
 }
 
-document.querySelector("#advanced-toggle").addEventListener("change", (event) => applyAdvancedMode(event.target.checked));
+document.querySelector('[data-control="advanced-toggle"]').addEventListener("change", (event) => applyAdvancedMode(event.target.checked));
 loadFixtures().then(render).catch(renderError);
