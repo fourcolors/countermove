@@ -31,13 +31,19 @@ def _find_competitor(company: Mapping[str, Any], name: str) -> Mapping[str, Any]
     raise ValueError(f"unknown competitor {name!r}")
 
 
+def _cents(value: float) -> int:
+    from decimal import Decimal, ROUND_HALF_EVEN
+    return int(Decimal(repr(float(value))).quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN) * 100)
+
+
 def infer_choice(price_after: float, your_new_price: float, current_price: float) -> str:
-    """Map a typed price onto the competitor response menu."""
-    if math.isclose(price_after, your_new_price):
+    """Map a typed price onto the menu; money compared exactly in cents."""
+    pa, yn, cur = _cents(price_after), _cents(your_new_price), _cents(current_price)
+    if pa == yn:
         return "match"
-    if math.isclose(price_after, current_price):
+    if pa == cur:
         return "ignore"
-    if price_after < your_new_price:
+    if pa < yn:
         return "undercut"
     return "raise"
 
@@ -87,7 +93,7 @@ def _score_leaf(
         "price_after": price_after,
     }
     if sandbox is None:
-        return score.score_leaf(company, move, payload_leaf)
+        raise ValueError("grow_branch requires a sandbox; in-process scoring is not permitted")
     payload = {"company": company, "move": move, "leaf": payload_leaf}
     result = sandbox.run(str(_SCORE_SCRIPT), payload)
     if not isinstance(result, Mapping):

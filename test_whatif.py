@@ -76,7 +76,7 @@ class GrowBranchTests(unittest.TestCase):
         self.before_hashes = _hash_map(self.tree)
         self.before_ids = set(self.before_hashes)
         self.before_nodes = copy.deepcopy(_by_id(self.tree))
-        self.result = grow_branch(self.tree, COMPANY, MOVE, RIVAL_A, CUT_TO)
+        self.result = grow_branch(self.tree, COMPANY, MOVE, RIVAL_A, CUT_TO, sandbox=ScoreLeafSandbox())
         self.nodes = _by_id(self.tree)
         self.after_hashes = _hash_map(self.tree)
         self.new_ids = [node_id for node_id in self.after_hashes if node_id not in self.before_ids]
@@ -188,7 +188,7 @@ class GrowBranchErrorTests(unittest.TestCase):
         tree = _fresh_tree()
         before = _hash_map(tree)
         with self.assertRaises(ValueError) as ctx:
-            grow_branch(tree, COMPANY, MOVE, "Rival Z", CUT_TO)
+            grow_branch(tree, COMPANY, MOVE, "Rival Z", CUT_TO, sandbox=ScoreLeafSandbox())
         self.assertIn("Rival Z", str(ctx.exception))
         self.assertIn("unknown", str(ctx.exception).lower())
         self.assertEqual(_hash_map(tree), before)
@@ -219,3 +219,30 @@ class GrowBranchSandboxTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    def test_sandbox_is_mandatory(self):
+        tree = _fresh_tree()
+        with self.assertRaises(ValueError):
+            grow_branch(tree, COMPANY, MOVE, RIVAL_A, CUT_TO, sandbox=None)
+
+    def test_choice_inference_is_strict_at_boundaries(self):
+        from tree.whatif import infer_choice
+        self.assertEqual(infer_choice(58.99, 59.0, 45.0), "undercut")
+        self.assertEqual(infer_choice(59.01, 59.0, 45.0), "raise")
+        self.assertEqual(infer_choice(59.0, 59.0, 45.0), "match")
+        self.assertEqual(infer_choice(45.0, 59.0, 45.0), "ignore")
+
+    def test_only_root_changes_among_preexisting_nodes(self):
+        tree = _fresh_tree()
+        import copy
+        before = {n["id"]: copy.deepcopy(n) for n in tree["nodes"]}
+        grow_branch(tree, COMPANY, MOVE, RIVAL_A, CUT_TO, sandbox=ScoreLeafSandbox())
+        after = {n["id"]: n for n in tree["nodes"]}
+        for node_id, node in before.items():
+            if node_id == "root":
+                self.assertNotEqual(node["hash"], after["root"]["hash"])
+            else:
+                self.assertEqual(node, {k: v for k, v in after[node_id].items() if k in node} | {k: after[node_id][k] for k in node},
+                                 f"pre-existing node {node_id} changed")
