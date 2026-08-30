@@ -92,13 +92,37 @@
               "type": "number"
             },
             "low_pct": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
             },
             "mid_pct": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
             },
             "high_pct": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
             }
           }
         }

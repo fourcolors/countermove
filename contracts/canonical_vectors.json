@@ -1,32 +1,70 @@
 [
   {
     "name": "tie-half-even-down",
-    "input": 0.1234565,
+    "input": {
+      "x": 0.1234565
+    },
     "canonical": "{\"x\":0.123456}"
   },
   {
     "name": "tie-half-even-up",
-    "input": 0.1234575,
+    "input": {
+      "x": 0.1234575
+    },
     "canonical": "{\"x\":0.123458}"
   },
   {
     "name": "negative-zero",
-    "input": -0.0,
+    "input": {
+      "x": -0.0
+    },
     "canonical": "{\"x\":0.0}"
   },
   {
     "name": "near-zero",
-    "input": 1e-09,
+    "input": {
+      "x": 1e-09
+    },
     "canonical": "{\"x\":0.0}"
   },
   {
     "name": "integer-float",
-    "input": 59.0,
+    "input": {
+      "x": 59.0
+    },
     "canonical": "{\"x\":59.0}"
   },
   {
     "name": "long-fraction",
-    "input": 1.0000004999,
+    "input": {
+      "x": 1.0000004999
+    },
     "canonical": "{\"x\":1.0}"
+  },
+  {
+    "name": "sources-sorted",
+    "input": {
+      "sources": [
+        "https://z.example/b",
+        "https://a.example/y"
+      ]
+    },
+    "canonical": "{\"sources\":[\"https://a.example/y\",\"https://z.example/b\"]}"
+  },
+  {
+    "name": "segments-sorted-by-id",
+    "input": {
+      "segments": [
+        {
+          "id": "mid",
+          "customers": 120
+        },
+        {
+          "id": "smb",
+          "customers": 300
+        }
+      ]
+    },
+    "canonical": "{\"segments\":[{\"customers\":120,\"id\":\"mid\"},{\"customers\":300,\"id\":\"smb\"}]}"
   }
 ]

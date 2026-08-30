@@ -38,7 +38,15 @@ def canon_number(x):
 
 def canon_value(v):
     if isinstance(v, dict):
-        return {k: canon_value(v[k]) for k in sorted(v)}
+        out = {}
+        for k in sorted(v):
+            val = v[k]
+            if k == "sources" and isinstance(val, list):
+                val = sorted(val)
+            elif k == "segments" and isinstance(val, list):
+                val = sorted(val, key=lambda s: s.get("id", "") if isinstance(s, dict) else "")
+            out[k] = canon_value(val)
+        return out
     if isinstance(v, list):
         return [canon_value(i) for i in v]
     return canon_number(v)
@@ -114,13 +122,16 @@ def build_tree():
     return {"root": "root", "root_hash": root_h, "nodes": nodes}
 
 
+# Each vector: canonical(input) where input is the object to canonicalize directly.
 VECTORS = [
-    {"name": "tie-half-even-down", "input": 0.1234565, "canonical": None},
-    {"name": "tie-half-even-up", "input": 0.1234575, "canonical": None},
-    {"name": "negative-zero", "input": -0.0, "canonical": None},
-    {"name": "near-zero", "input": 1e-9, "canonical": None},
-    {"name": "integer-float", "input": 59.0, "canonical": None},
-    {"name": "long-fraction", "input": 1.0000004999, "canonical": None},
+    {"name": "tie-half-even-down", "input": {"x": 0.1234565}, "canonical": None},
+    {"name": "tie-half-even-up", "input": {"x": 0.1234575}, "canonical": None},
+    {"name": "negative-zero", "input": {"x": -0.0}, "canonical": None},
+    {"name": "near-zero", "input": {"x": 1e-9}, "canonical": None},
+    {"name": "integer-float", "input": {"x": 59.0}, "canonical": None},
+    {"name": "long-fraction", "input": {"x": 1.0000004999}, "canonical": None},
+    {"name": "sources-sorted", "input": {"sources": ["https://z.example/b", "https://a.example/y"]}, "canonical": None},
+    {"name": "segments-sorted-by-id", "input": {"segments": [{"id": "mid", "customers": 120}, {"id": "smb", "customers": 300}]}, "canonical": None},
 ]
 
 
@@ -128,7 +139,7 @@ def main():
     tree = build_tree()
     (HERE / "fixtures" / "tree.json").write_text(json.dumps(tree, indent=2) + "\n")
     for v in VECTORS:
-        v["canonical"] = canonical({"x": v["input"]}).decode()
+        v["canonical"] = canonical(v["input"]).decode()
     (HERE / "canonical_vectors.json").write_text(json.dumps(VECTORS, indent=2) + "\n")
     print(f"root_hash={tree['root_hash']}")
     print(f"nodes={len(tree['nodes'])} (expect 1 + 12 + 36 = 49)")

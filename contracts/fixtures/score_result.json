@@ -1,11 +1,11 @@
 {
   "leaf_id": "leaf-rival-a-undercut-hold",
-  "low": -1270.34,
-  "mid": 480.12,
-  "high": 2210.55,
-  "low_pct": -1.8,
-  "mid_pct": 0.7,
-  "high_pct": 3.2,
+  "low": -2000.0,
+  "mid": -1200.0,
+  "high": -400.0,
+  "low_pct": -1.4,
+  "mid_pct": -0.2,
+  "high_pct": 1.1,
   "assumptions": {
     "eps": {
       "low": -1.25,

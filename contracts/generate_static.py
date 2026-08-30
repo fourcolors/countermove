@@ -16,6 +16,8 @@ def w(rel, obj):
 
 NUM = {"type": "number"}
 STR = {"type": "string"}
+PCT = {"anyOf": [{"type": "number"}, {"const": "n/a"}],
+       "description": "percent of baseline revenue, or 'n/a' when baseline is zero"}
 ELASTICITY = {"type": "object", "required": ["low", "mid", "high"],
               "properties": {"low": NUM, "mid": NUM, "high": NUM},
               "description": "low is the more-negative endpoint; scalar e expands to {e-0.15, e, e+0.15}, high clamped below 0"}
@@ -53,16 +55,14 @@ w("tree_node.schema.json", {"$schema": S, "title": "tree_node", "type": "object"
     "score": {"anyOf": [{"type": "null"}, {"type": "object",
       "required": ["low", "mid", "high", "low_pct", "mid_pct", "high_pct"],
       "properties": {"low": NUM, "mid": NUM, "high": NUM,
-                     "low_pct": NUM, "mid_pct": NUM, "high_pct": NUM}}]},
+                     "low_pct": PCT, "mid_pct": PCT, "high_pct": PCT}}]},
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "children": {"type": "array", "items": STR}}})
 
 w("score_result.schema.json", {"$schema": S, "title": "score_result", "type": "object",
   "required": ["leaf_id", "low", "mid", "high", "low_pct", "mid_pct", "high_pct", "assumptions"],
   "properties": {"leaf_id": STR, "low": NUM, "mid": NUM, "high": NUM,
-                 "low_pct": {"anyOf": [NUM, {"const": "n/a"}]},
-                 "mid_pct": {"anyOf": [NUM, {"const": "n/a"}]},
-                 "high_pct": {"anyOf": [NUM, {"const": "n/a"}]},
+                 "low_pct": PCT, "mid_pct": PCT, "high_pct": PCT,
                  "assumptions": {"type": "object"}}})
 
 w("trace_event.schema.json", {"$schema": S, "title": "trace_event", "type": "object",
@@ -124,9 +124,13 @@ w("fixtures/company.json", {"name": "Acme Stay", "plans": [{"id": "pro", "price"
 
 w("fixtures/move.json", {"plan": "pro", "from": 49, "to": 59, "action": "open_pr", "effective": "2026-09-07"})
 
-w("fixtures/score_result.json", {"leaf_id": "leaf-rival-a-undercut-hold",
-  "low": -1270.34, "mid": 480.12, "high": 2210.55,
-  "low_pct": -1.8, "mid_pct": 0.7, "high_pct": 3.2,
+# Derive per-leaf fixtures from the tree so shared leaf ids can never disagree.
+tree = json.loads((HERE / "fixtures" / "tree.json").read_text())
+leaves = {n["id"]: n for n in tree["nodes"]}
+
+sr_leaf = leaves["leaf-rival-a-undercut-hold"]
+w("fixtures/score_result.json", {"leaf_id": sr_leaf["id"],
+  **{k: sr_leaf["score"][k] for k in ("low", "mid", "high", "low_pct", "mid_pct", "high_pct")},
   "assumptions": {"eps": {"low": -1.25, "mid": -1.1, "high": -0.95}, "eta": 0.4,
                   "c_prime_convention": "mean of all three competitors' price_after; non-responders keep last scraped price"}})
 
@@ -147,9 +151,10 @@ w("fixtures/pending_action.json", {"id": "act-1",
   "root_hash": "fac0a6c8240bdbd9582a82d675ea6c00a7dcd4bc057348f1f400406a256c3a6b",
   "status": "waiting", "deny_reason": None})
 
-w("fixtures/recommendation.json", {"path_id": "leaf-rival-a-ignore-hold",
+rec_leaf = leaves["leaf-rival-a-ignore-hold"]
+w("fixtures/recommendation.json", {"path_id": rec_leaf["id"],
   "sentence": "Raise Pro to $59 and hold even if Rival A ignores it.",
-  "band": {"low_pct": -1.0, "mid_pct": 6.0, "high_pct": 11.0},
+  "band": {k: rec_leaf["score"][k] for k in ("low_pct", "mid_pct", "high_pct")},
   "runner_up_id": "leaf-rival-a-undercut-partial_rollback",
   "runner_up_reason": "Partial rollback protects fewer customers than it costs in revenue.",
   "sensitivity": {"flips_ranking": False,
