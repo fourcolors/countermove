@@ -5,6 +5,11 @@
       "low": "elasticity high end above -0.9",
       "medium": "-0.9 to -1.3",
       "high": "below -1.3"
+    },
+    "thresholds": {
+      "comment": "classify by mid elasticity: e > medium_min -> low sensitivity; e < high_max -> high; else medium",
+      "medium_min": -0.9,
+      "high_max": -1.3
     }
   },
   "cross_elasticity": {
@@ -13,6 +18,10 @@
       "a little": "below 0.3",
       "some": "0.3 to 0.6",
       "a lot": "above 0.6"
+    },
+    "thresholds": {
+      "some_min": 0.3,
+      "a_lot_min": 0.6
     }
   },
   "monthly_churn": {
