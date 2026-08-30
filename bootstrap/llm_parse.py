@@ -29,6 +29,9 @@ _UNANCHORED_REPLY = (
     "I understood that as changing %s to $%s, but I need you to restate "
     "the move with the plan name and the new price spelled out."
 )
+_PLAN_ID_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$")
+_CATALOG_PRICE = re.compile(r"^[0-9.]{1,12}$")
+_CANONICAL_MOVE_LINE = re.compile(r"^(Raise|Lower)\b.*\$")
 
 
 def normalize_move(sentence, company, runner=None, strict_reply=None):
@@ -41,7 +44,7 @@ def normalize_move(sentence, company, runner=None, strict_reply=None):
     run = _default_runner if runner is None else runner
     try:
         raw = run(prompt)
-        line = _last_nonempty_line(raw)
+        line = _extract_reply_line(raw)
     except (KeyboardInterrupt, SystemExit, AssertionError):
         raise
     except Exception:
@@ -189,9 +192,15 @@ def _plan_catalog(company):
     rows = []
     for plan in (company or {}).get("plans") or []:
         name = str(plan.get("id", "")).strip()
-        if not name:
+        if not _PLAN_ID_TOKEN.match(name):
             continue
-        rows.append("- %s at $%s" % (name, _shown_price(plan.get("price"))))
+        try:
+            shown = str(_shown_price(plan.get("price")))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not _CATALOG_PRICE.match(shown):
+            continue
+        rows.append("- %s at $%s" % (name, shown))
     if not rows:
         return "- (none listed)"
     return "\n".join(rows)
@@ -207,15 +216,22 @@ def _shown_price(price):
     return str(number)
 
 
-def _last_nonempty_line(raw):
+def _extract_reply_line(raw):
     if raw is None:
         raise RuntimeError("empty grok output")
     if not isinstance(raw, str):
         raw = str(raw)
     lines = [line.strip() for line in raw.splitlines() if line.strip()]
-    if not lines:
-        raise RuntimeError("empty grok output")
-    return lines[-1]
+    allowed = [line for line in lines if _is_allowed_reply_line(line)]
+    if len(allowed) != 1:
+        raise RuntimeError("ambiguous grok output")
+    return allowed[0]
+
+
+def _is_allowed_reply_line(line):
+    if line.upper().startswith("REPLY:"):
+        return True
+    return bool(_CANONICAL_MOVE_LINE.match(line))
 
 
 def _fallback_reply(sentence, company, strict_reply):
