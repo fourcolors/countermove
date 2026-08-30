@@ -4,6 +4,7 @@
 !.env.example
 
 # Session store (JSON on disk; recreated per run)
+session/
 sessions/
 
 # Local agent state

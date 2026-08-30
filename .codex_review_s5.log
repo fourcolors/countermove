@@ -1,0 +1,3324 @@
+Reading additional input from stdin...
+OpenAI Codex v0.151.0
+--------
+workdir: /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a0505e-2061-78d3-a1ba-99b75f43fa2b
+--------
+user
+Adversarial merge-gate review of slice S5 (bootstrap/ + test_bootstrap.py + mirrors/acme-stay.html vs main). Authorities: countermove.md Feature: Company bootstrap, Feature: Move, S5 AC, contracts/company.schema.json + move.schema.json. REFUTE: (1) parse_move correctness - probe the demo sentence, date resolution from a fixed today, a question, a non-price move, an unknown plan, adversarial inputs (empty, reversed prices); (2) does the company draft go through the tool router (hunt untraced fetch paths) and validate against the schema; (3) labeled defaults with assumed=true; (4) CSV merge - malformed loud, unmatched surfaced, churn > 1 rejected; (5) test honesty; (6) scope. Run python3 -m unittest test_bootstrap -v. Verdict PASS or FAIL first, then numbered findings with severity, file:line, fixes.
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart Completed
+hook: SessionStart Completed
+hook: SessionStart Completed
+hook: SessionStart Failed
+codex
+I’m reviewing S5 strictly against `main` and the named spec/schema authorities. I’m using the code-review skill because this is a merge-gate diff review; it requires independent standards/spec checks, and I’ll add direct adversarial runtime probes plus the requested unittest run.
+exec
+/bin/zsh -lc "sed -n '1,240p' /Users/fourcolors/.agents/skills/code-review/SKILL.md && rg -n \"countermove|bootstrap|parse_move|Company bootstrap\" /Users/fourcolors/.codex/memories/MEMORY.md" in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ exited 1 in 0ms:
+---
+name: code-review
+description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+---
+
+Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+
+- **Standards**: does the code conform to this repo's documented coding standards?
+- **Spec**: does the code faithfully implement the originating issue / spec?
+
+Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
+
+The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `/setup-matt-pocock-skills`.
+
+## Process
+
+### 1. Pin the fixed point
+
+Whatever the user said is the fixed point (a commit SHA, branch name, tag, `main`, `HEAD~5`, etc.). If they didn't specify one, ask for it.
+
+Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+
+Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here, not inside two parallel sub-agents.
+
+### 2. Identify the spec source
+
+Look for the originating spec, in this order:
+
+1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in `docs/agents/issue-tracker.md`.
+2. A path the user passed as an argument.
+3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
+4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
+
+### 3. Identify the standards sources
+
+Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
+
+On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
+
+- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
+- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation. Like any standard here, skip anything tooling already enforces.
+
+Each smell reads *what it is* → *how to fix*; match it against the diff:
+
+- **Mysterious Name**: a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
+- **Duplicated Code**: the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
+- **Feature Envy**: a method that reaches into another object's data more than its own. → move the method onto the data it envies.
+- **Data Clumps**: the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
+- **Primitive Obsession**: a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
+- **Repeated Switches**: the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
+- **Shotgun Surgery**: one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
+- **Divergent Change**: one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
+- **Speculative Generality**: abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
+- **Message Chains**: long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
+- **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
+- **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
+
+### 4. Spawn both sub-agents in parallel
+
+**Standards sub-agent prompt** should include:
+
+- The full diff command and commit list.
+- The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full (the sub-agent has no other access to it).
+- The brief: "Report, per file/hunk where relevant, (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls: documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
+
+**Spec sub-agent prompt** should include:
+
+- The diff command and commit list.
+- The path or fetched contents of the spec.
+- The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
+
+If the spec is missing, skip the Spec sub-agent and note this in the final report.
+
+### 5. Aggregate
+
+Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, because the two axes are deliberately separate (see _Why two axes_).
+
+End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes: that's the reranking the separation exists to prevent.
+
+## Why two axes
+
+A change can pass one axis and fail the other:
+
+- Code that follows every standard but implements the wrong thing → **Standards pass, Spec fail.**
+- Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
+
+Reporting them separately stops one axis from masking the other.
+
+exec
+/bin/zsh -lc "pwd && git status --short --branch && git rev-parse main && git merge-base main HEAD && git log main..HEAD --oneline && git diff --stat main...HEAD && git diff --name-only main...HEAD && rg --files -g 'AGENTS.md' -g 'CONTRIBUTING*' -g 'CODING*' -g 'docs/agents/issue-tracker.md' -g 'countermove.md' -g 'contracts/*.schema.json' -g 'bootstrap/**' -g 'test_bootstrap.py' -g 'mirrors/acme-stay.html'" in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+## s5-bootstrap-clean...origin/s5-bootstrap-clean
+?? .codex_review_s5.log
+c3a9bf2446c5cbc6c1a0da973eeda41e2abb145a
+c3a9bf2446c5cbc6c1a0da973eeda41e2abb145a
+0c8b8a3 Adapt bootstrap imports to gather's sealed public surface
+47bfb08 S5: company bootstrap - move parsing, company draft, CSV merge
+ bootstrap/__init__.py      |  26 ++++
+ bootstrap/company_draft.py | 295 +++++++++++++++++++++++++++++++++++++++++++++
+ bootstrap/csv_merge.py     | 176 +++++++++++++++++++++++++++
+ bootstrap/move_parse.py    | 286 +++++++++++++++++++++++++++++++++++++++++++
+ mirrors/acme-stay.html     |  33 +++++
+ test_bootstrap.py          | 286 +++++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 1102 insertions(+)
+bootstrap/__init__.py
+bootstrap/company_draft.py
+bootstrap/csv_merge.py
+bootstrap/move_parse.py
+mirrors/acme-stay.html
+test_bootstrap.py
+test_bootstrap.py
+mirrors/acme-stay.html
+contracts/pending_action.schema.json
+contracts/recommendation.schema.json
+contracts/persona_card.schema.json
+contracts/tree_node.schema.json
+contracts/trace_event.schema.json
+contracts/score_result.schema.json
+contracts/move.schema.json
+contracts/company.schema.json
+countermove.md
+bootstrap/csv_merge.py
+bootstrap/move_parse.py
+bootstrap/__pycache__/__init__.cpython-313.pyc
+bootstrap/__pycache__/__init__.cpython-314.pyc
+bootstrap/__pycache__/company_draft.cpython-313.pyc
+bootstrap/__pycache__/company_draft.cpython-314.pyc
+bootstrap/__pycache__/move_parse.cpython-313.pyc
+bootstrap/__pycache__/move_parse.cpython-314.pyc
+bootstrap/__pycache__/csv_merge.cpython-313.pyc
+bootstrap/__pycache__/csv_merge.cpython-314.pyc
+bootstrap/__init__.py
+bootstrap/company_draft.py
+
+exec
+/bin/zsh -lc 'rg -n -A90 -B10 "Feature: Company bootstrap|Feature: Move|S5|bootstrap|CSV|assumed" countermove.md && nl -ba contracts/company.schema.json && nl -ba contracts/move.schema.json && git diff --unified=80 main...HEAD -- bootstrap/move_parse.py bootstrap/company_draft.py bootstrap/csv_merge.py bootstrap/__init__.py test_bootstrap.py mirrors/acme-stay.html' in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+188-AC: `score.py` implements the Scoring section exactly (monthly-sum revenue, price factor capped at 1, baseline and move_cost definitions, counter semantics, scalar-to-range expansion, score_percent with the zero-baseline case); the deterministic Feature: Scorer scenarios (baseline zero, inelastic gain, elastic loss, undercut, cap, competitor raise, band, changed-assumption rerun) pass as automated tests; score.py runs in the sandbox on the fixture leaf and emits a trace event.
+189-Features: Feature: Scorer (the display half of assumption editing belongs to S6).
+190-
+191-**S2 - Provenance lib**
+192-Depends: S0.
+193-AC: `provenance.py` implements `canonical()` exactly as pinned in the Provenance section; recomputing S0's fixture tree reproduces its independently minted reference root; editing any node field changes the root; changing a node rehashes every ancestor and no off-path node; property tests cover float rounding and key ordering.
+194-Features: Feature: Provenance (hash and recompute scenarios; the memo and UI scenarios belong to S7).
+195-
+196-**S3 - Gather**
+197-Depends: S0.
+198:AC: three competitor pages scraped through Bright Data MCP with price extracted as a number; every call, URL, and extracted price in the trace; a failed parse yields "price unknown" plus the price from the `contracts/` company fixture as fallback, surfaced in the trace (S5 later swaps the source to the drafted file); every scrape persists a snapshot (content digest + timestamp) retrievable after the source changes, with one real gather run's snapshot and trace JSON committed as test evidence; the demo snapshot mirrors are committed under `mirrors/` with content digests and fetch timestamps; search_engine is called per competitor and up to three result URLs attach to its persona card.
+199-Features: Feature: Gather.
+200-
+201-**S4 - UI shell and widgets**
+202-Depends: S0.
+203-AC: chat-first page renders conversation plus trace panel (doing / waiting / did); company card, tree widget, approval card, and recommendation all render from `contracts/` fixtures with no backend; no YAML or field names visible outside advanced view; jargon translations are driven by `contracts/jargon.json` and tested against it.
+204-Features: Feature: Plain language (except the assistant-client scenario, which is stretch).
+205-
+206-**Wave 2**
+207-
+208:**S5 - Company bootstrap**
+209-Depends: S3, S4.
+210:AC: a typed sentence becomes `move.yaml` per Feature: Move, and questions or non-price moves are rejected without building a tree; a URL becomes a draft company summary in the editable card; CSV drop merges matching segments and surfaces unmatched rows; missing elasticity gets the labeled default range; a corrected number persists to the session store and survives reload.
+211:Features: Feature: Company bootstrap, Feature: Move.
+212-
+213-**S6 - Tree**
+214-Depends: S1, S2, S3.
+215-AC: one subagent per competitor in parallel, each a distinct trace actor; responses are forced-choice with numeric price_before/price_after per the fixed semantics, reasoning, and sources; scraped content reaches subagents only per the untrusted-content boundary, with an automated injection test; the C-prime convention is applied and displayed as an editable assumption; every leaf scored with bands in dollars and percent, and editing an assumption reruns the scorer and updates the display; every node hashed at creation and the root exposed; at most 36 leaves; the one-extra-scrape budget is enforced by the orchestrator's counter and a second request is refused and traced; interactive depth works as specified (depth 0 default with best-scoring counters, depth 1 pauses once, the setting asked in plain language and remembered); after scoring, the recommendation names the path, the runner-up, the price-sensitivity risk read off the top two paths' bands, and a concrete watch trigger; the highest-mid-score path is highlighted and its first move queued as the pending action.
+216-Features: Feature: Tree, Feature: Interactive depth, Feature: Recommendation (except the next-session trigger check, owned by S8), Feature: Untrusted content (subagent scenario).
+217-
+218-**Wave 3**
+219-
+220-**S7 - Gate**
+221-Depends: S6, S4, S2.
+222-AC: pending action shows the diff, memo text, winning branch, and root hash with nothing written; the gate service holds the only write credential and refuses without a token minted by a human Allow click; the approval queue API is callable programmatically but cannot authorize - only the UI Allow click mints the token (the MCP surface stays stretch); Allow opens the PR with the `pricing.yaml` change plus memo, and both the memo and the PR body carry the root hash; the memo and PR are rendered from the typed template with reasoning in fenced quote blocks, with an automated injection test; Deny writes locally with the reason; after a Deny, selecting a different branch queues a new pending action and the denied one remains in did; the UI recomputes the root from the stored tree and flags a memo mismatch; both paths traced and filmed.
+223-Features: Feature: Gate, Feature: Untrusted content (memo/PR scenario), Feature: Provenance (memo, tamper-flag scenarios).
+224-
+225-**S8 - Session and watch trigger**
+226-Depends: S6.
+227-AC: reload restores tree, scores, and decision; a new move on the same plan surfaces the previous decision and its reason first; a stored watch trigger is re-checked at session start via a fresh scrape and reported before anything else.
+228-Features: Feature: Session, Feature: Recommendation (next-session trigger check).
+229-
+230-**S9 - What-if** (first to cut)
+231-Depends: S6, S2.
+232-AC: a typed competitor alternative grows one branch with generated counters and scores; only the new branch's leaves rescore in the sandbox; hashes recompute from the changed node through every ancestor to the root; every off-path node, including other existing branches under the same competitor, keeps its hash.
+233-Features: Feature: What-if, Feature: Provenance (what-if scope scenario).
+234-
+235-The MCP-server surface (`setup_company`, `evaluate_move`, `approve_action` from assistant clients) is a stretch outside every v0 slice's merge gate.
+236-
+237-**Checkpoints:** if S6 is not rendering a scored tree by 15:00, cut S9 and demo with a fixed competitor response.
+238-If S7 is not opening a PR by 16:00, the gate writes the memo to the repo directly as the action.
+239-A pre-staged, already-Qodo-reviewed PR from a prior run is prepared before filming (see Demo script).
+240-Video recording starts at 17:00 whatever the state.
+241-
+242-## Demo script (3 minutes)
+243-
+244-0:00 - the move, typed as one sentence.
+245-0:20 - company summary appears from the URL; correct one number on camera.
+246-0:45 - trace shows Bright Data calls landing; competitor prices appear.
+247-1:15 - tree grows; click Rival A's branch; show the score band and the assumptions behind it.
+248-1:50 - change one elasticity; sandbox reruns; score moves.
+249-2:15 - the action lands in the waiting column: open PR with diff and memo. Deny it, with a reason. Then run the alternative branch and Allow; the PR opens on camera.
+250-2:40 - cut to a pre-staged PR from an earlier run with Qodo's completed review, labeled on camera as "a prior run's PR" - a live Qodo review takes minutes and never fits the window.
+251-2:50 - close on the decision trace: doing, waiting, did.
+252-
+253-## Rules check
+254-
+255-- New repo, new code, no product core. Rule 4.
+256-- Synthetic company, public competitor pages only, no private data, no secrets in repo or video. Rule 6.
+257-- TrueForge visible doing MCP, sandbox, pause, subagents, session. Rule 1.
+258-- PR trail through Qodo, every High fixed or dismissed in-thread. Rule 2.
+259-- README has setup, `## Qodo Code Review Evidence`, and the disclosure that AI coding tools were used.
+260-- No Twilio, no FlowStay or Property.bot accounts, no AGPL imports.
+261-
+262----
+263-
+264-# BDD scenarios
+265-
+266-Gherkin, one Feature per slice or cross-cutting concern. Each slice's AC names its Features; they become automated tests inside that slice's PR.
+267-
+268-```gherkin
+269-Feature: Rails
+270-  The harness, the review trail, and the repo exist before any product code.
+271-
+272-  Scenario: Orchestrator runs on TrueForge
+273-    Given the repo is cloned fresh by a stranger
+274-    When they follow the README setup
+275-    Then the orchestrator starts inside TrueForge
+276-    And a hello-world tool call appears in the decision trace
+277-
+278-  Scenario: Every change goes through Qodo
+279-    Given a branch with a substantive change
+280-    When a PR is opened
+281-    Then Qodo posts a review on the PR
+282-    And the PR is merged only by a human
+283-    And every High finding is fixed or dismissed in the Qodo thread with a reason
+284-
+285-  Scenario: Only allowlisted tools are reachable
+286-    Given the tool allowlist is Bright Data MCP, sandbox exec, GitHub MCP
+287-    When the orchestrator or any subagent requests a tool outside the list
+288-    Then the tool router refuses the request
+289-    And the refusal appears in the trace
+290-
+291-
+292-Feature: Scorer
+293-  score.py is deterministic, tested, and runs in the sandbox.
+294-
+295-  Background:
+296-    Given a segment with 300 customers, price 49, monthly churn 0.04
+297-    And own-price elasticity -1.1 and cross-price elasticity 0.4
+298-    And competitor average price 45 before and 45 after
+299-    And a horizon of 6 months
+300-
+301-  Scenario: Baseline equals no-move revenue
+--
+370-    Then search_engine is called through Bright Data MCP for that competitor
+371-    And up to three result URLs are attached to the competitor's persona card
+372-
+373-  Scenario: Every scrape persists a snapshot
+374-    Given a competitor pricing URL
+375-    When the gather step scrapes it
+376-    Then a snapshot with content digest and timestamp is persisted with the session
+377-    And the snapshot is retrievable after the source page changes
+378-
+379-
+380:Feature: Company bootstrap
+381-  The company summary is drafted from the public site and corrected by a human.
+382-
+383-  Scenario: Draft from a URL
+384-    Given a company website URL
+385-    When the user submits it
+386-    Then the agent scrapes the site through Bright Data MCP
+387-    And a draft company.yaml appears with plans, prices, and competitors
+388-    And every field is editable before continuing
+389-
+390-  Scenario: Internal file merges into segments
+391-    Given a draft company.yaml
+392:    And a CSV with columns segment, customers, monthly_churn
+393:    When the user drops the CSV
+394:    Then matching segments are updated with the CSV values
+395-    And unmatched rows are shown for the user to assign or discard
+396-
+397-  Scenario: Missing elasticity gets a labeled default
+398-    Given a segment with no elasticity value
+399-    When the company summary is confirmed
+400-    Then the segment gets the B2B default range
+401:    And the UI labels it "assumed, not measured"
+402-
+403-  Scenario: A corrected number survives reload
+404-    Given the user corrected a price on the company card
+405-    When the page is reloaded
+406-    Then the corrected value is displayed, not the drafted one
+407-
+408-
+409:Feature: Move
+410-  One sentence becomes a structured move, or is sent back.
+411-
+412-  Scenario: A move is parsed
+413-    When the user types "Raise Pro from $49 to $59 and email customers next Monday"
+414-    Then move.yaml has plan pro, from 49, to 59, effective next Monday
+415-    And the action is open_pr
+416-
+417-  Scenario: A question is rejected
+418-    When the user types "Should I raise prices?"
+419-    Then the agent asks for a specific move
+420-    And no tree is built
+421-
+422-  Scenario: Non-price moves are out of scope
+423-    When the user types "Launch a new onboarding flow"
+424-    Then the agent explains only price moves are supported today
+425-    And no tree is built
+426-
+427-
+428-Feature: Tree
+429-  Competitor subagents choose from a menu; your counters come from a menu; every leaf is scored.
+430-
+431-  Scenario: One subagent per competitor, in parallel
+432-    Given three competitors in company.yaml
+433-    When the tree builds
+434-    Then three subagents are spawned
+435-    And each appears as a separate actor in the trace
+436-
+437-  Scenario: Competitor response is forced-choice with reasoning
+438-    Given a competitor subagent with a persona card
+439-    When it responds to the move
+440-    Then its choice is one of undercut, match, ignore, raise
+441-    And it carries numeric price_before and price_after computed by the fixed semantics
+442-    And it includes a reasoning string
+443-    And it lists the source URLs it used
+444-
+445-  Scenario: The C-prime convention is a visible assumption
+446-    Given a scored leaf
+447-    When it is displayed
+448-    Then the competitor-average convention appears as an editable assumption
+449-
+450-  Scenario: Editing an assumption reruns the scorer and updates the display
+451-    Given a scored leaf is displayed
+452-    When the user changes own-price elasticity to -0.9
+453-    Then score.py reruns in the sandbox
+454-    And the displayed band updates
+455-
+456-  Scenario: Subagent may request one extra scrape
+457-    Given a competitor subagent
+458-    When it requests a scrape of a URL from its persona card
+459-    Then the scrape runs through Bright Data MCP
+460-    And the orchestrator's scrape counter refuses any second request
+461-    And the refusal appears in the trace
+462-
+463-  Scenario: Counter-moves come from the fixed menu
+464-    Given a competitor response node
+465-    When the tree expands it
+466-    Then the children are hold, partial_rollback, annual_discount
+467-    And nothing else
+468-
+469-  Scenario: Every leaf is scored
+470-    When the tree finishes
+471-    Then every leaf has a low, mid, high score
+472-    And every leaf shows the assumptions used
+473-
+474-  Scenario: Depth is capped at two
+475-    When the tree finishes
+476-    Then no node is deeper than your counter-move
+477-    And the tree has at most 36 leaves for three competitors
+478-
+479-  Scenario: Best path is proposed
+480-    When the tree finishes
+481-    Then the path with the highest mid score after each competitor's chosen response is highlighted
+482-    And its first move is queued as the pending action
+483-
+484-
+485-Feature: Gate
+486-  The agent asks before it writes, and both answers are recorded.
+487-
+488-  Scenario: Pending action shows the full payload
+489-    Given a best path is proposed
+490-    When the action reaches the waiting column
+491-    Then the user sees the pricing.yaml diff
+492-    And the decision memo text
+493-    And the winning branch with its score band and assumptions
+494-    And nothing has been written yet
+495-
+496-  Scenario: Allow opens the PR
+497-    Given a pending open_pr action
+498-    When the user clicks Allow
+499-    Then a PR is opened on the pricing repo through GitHub MCP
+     1	{
+     2	  "$schema": "http://json-schema.org/draft-07/schema#",
+     3	  "title": "company",
+     4	  "type": "object",
+     5	  "required": [
+     6	    "name",
+     7	    "plans",
+     8	    "competitors"
+     9	  ],
+    10	  "properties": {
+    11	    "name": {
+    12	      "type": "string"
+    13	    },
+    14	    "plans": {
+    15	      "type": "array",
+    16	      "items": {
+    17	        "type": "object",
+    18	        "required": [
+    19	          "id",
+    20	          "price",
+    21	          "segments"
+    22	        ],
+    23	        "properties": {
+    24	          "id": {
+    25	            "type": "string"
+    26	          },
+    27	          "price": {
+    28	            "type": "number"
+    29	          },
+    30	          "segments": {
+    31	            "type": "array",
+    32	            "items": {
+    33	              "type": "object",
+    34	              "required": [
+    35	                "id",
+    36	                "customers",
+    37	                "monthly_churn",
+    38	                "elasticity",
+    39	                "cross_elasticity"
+    40	              ],
+    41	              "properties": {
+    42	                "id": {
+    43	                  "type": "string"
+    44	                },
+    45	                "customers": {
+    46	                  "type": "number"
+    47	                },
+    48	                "monthly_churn": {
+    49	                  "type": "number"
+    50	                },
+    51	                "elasticity": {
+    52	                  "type": "object",
+    53	                  "required": [
+    54	                    "low",
+    55	                    "mid",
+    56	                    "high"
+    57	                  ],
+    58	                  "properties": {
+    59	                    "low": {
+    60	                      "type": "number"
+    61	                    },
+    62	                    "mid": {
+    63	                      "type": "number"
+    64	                    },
+    65	                    "high": {
+    66	                      "type": "number"
+    67	                    }
+    68	                  },
+    69	                  "description": "low is the more-negative endpoint; scalar e expands to {e-0.15, e, e+0.15}, high clamped below 0"
+    70	                },
+    71	                "cross_elasticity": {
+    72	                  "type": "number"
+    73	                },
+    74	                "assumed": {
+    75	                  "type": "boolean",
+    76	                  "description": "true when defaults were applied; UI labels it 'assumed, not measured'"
+    77	                }
+    78	              }
+    79	            }
+    80	          }
+    81	        }
+    82	      }
+    83	    },
+    84	    "competitors": {
+    85	      "type": "array",
+    86	      "items": {
+    87	        "type": "object",
+    88	        "required": [
+    89	          "name",
+    90	          "url",
+    91	          "price"
+    92	        ],
+    93	        "properties": {
+    94	          "name": {
+    95	            "type": "string"
+    96	          },
+    97	          "url": {
+    98	            "type": "string"
+    99	          },
+   100	          "price": {
+   101	            "type": "number"
+   102	          }
+   103	        }
+   104	      }
+   105	    }
+   106	  }
+   107	}
+     1	{
+     2	  "$schema": "http://json-schema.org/draft-07/schema#",
+     3	  "title": "move",
+     4	  "type": "object",
+     5	  "required": [
+     6	    "plan",
+     7	    "from",
+     8	    "to",
+     9	    "action",
+    10	    "effective"
+    11	  ],
+    12	  "properties": {
+    13	    "plan": {
+    14	      "type": "string"
+    15	    },
+    16	    "from": {
+    17	      "type": "number"
+    18	    },
+    19	    "to": {
+    20	      "type": "number"
+    21	    },
+    22	    "action": {
+    23	      "const": "open_pr"
+    24	    },
+    25	    "effective": {
+    26	      "type": "string",
+    27	      "format": "date"
+    28	    }
+    29	  }
+    30	}
+diff --git a/bootstrap/__init__.py b/bootstrap/__init__.py
+new file mode 100644
+index 0000000..7542c31
+--- /dev/null
++++ b/bootstrap/__init__.py
+@@ -0,0 +1,26 @@
++"""Company bootstrap and move parsing.
++
++Public surface: parse_move, draft_company, merge_csv.
++"""
++
++from .company_draft import (
++    ACME_SITE_URL,
++    DEFAULT_CROSS_ELASTICITY,
++    DEFAULT_ELASTICITY,
++    AcmeMirrorClient,
++    draft_company,
++)
++from .csv_merge import CsvMergeError, merge_csv
++from .move_parse import Rejection, parse_move
++
++__all__ = [
++    "ACME_SITE_URL",
++    "DEFAULT_CROSS_ELASTICITY",
++    "DEFAULT_ELASTICITY",
++    "AcmeMirrorClient",
++    "CsvMergeError",
++    "Rejection",
++    "draft_company",
++    "merge_csv",
++    "parse_move",
++]
+diff --git a/bootstrap/company_draft.py b/bootstrap/company_draft.py
+new file mode 100644
+index 0000000..7292c46
+--- /dev/null
++++ b/bootstrap/company_draft.py
+@@ -0,0 +1,295 @@
++"""Draft a company summary from a public site scraped through the tool router."""
++
++import copy
++import hashlib
++import html
++import json
++import re
++from datetime import datetime, timezone
++from pathlib import Path
++
++from gather.client import MirrorScrapeClient
++from gather.extract import extract_facts, extract_price
++from orchestrator.tool_router import ToolRouter
++from orchestrator.trace import emit
++
++_REPO_ROOT = Path(__file__).resolve().parent.parent
++_FIXTURE_PATH = _REPO_ROOT / "contracts" / "fixtures" / "company.json"
++_DEFAULT_MIRRORS = _REPO_ROOT / "mirrors"
++_ACME_MIRROR = "acme-stay.html"
++
++ACME_SITE_URL = "https://acme-stay.example/"
++ACME_SITE_URLS = frozenset(
++    {
++        "https://acme-stay.example",
++        "https://acme-stay.example/",
++        "https://acme-stay.example/pricing",
++    }
++)
++
++# B2B with switching costs from the Scoring section; mid is the midpoint.
++DEFAULT_ELASTICITY = {"low": -0.9, "mid": -0.8, "high": -0.7}
++DEFAULT_CROSS_ELASTICITY = 0.4
++
++_PLAN_TAG = re.compile(
++    r"(?is)<([a-z][a-z0-9]*)\b([^>]*\bdata-plan\s*=\s*['\"][^'\"]+['\"][^>]*)>"
++    r"(.*?)</\1\s*>"
++)
++_SEGMENT_TAG = re.compile(
++    r"(?is)<[a-z][a-z0-9]*\b([^>]*\bdata-segment\s*=\s*['\"][^'\"]+['\"][^>]*)>"
++)
++_ATTR = re.compile(r"""([:\w-]+)\s*=\s*(['"])(.*?)\2""")
++_H1 = re.compile(r"(?is)<h1\b[^>]*>(.*?)</h1>")
++_TITLE = re.compile(r"(?is)<title\b[^>]*>(.*?)</title>")
++_TAGS = re.compile(r"<[^>]+>")
++_DOLLAR = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
++
++
++class AcmeMirrorClient:
++    """Serve the committed Acme Stay mirror, then defer to MirrorScrapeClient.
++
++    Unknown non-Acme URLs still raise through the inner gather client.
++    Never touches the network.
++    """
++
++    def __init__(self, mirrors_dir=None, inner=None):
++        self.mirrors_dir = (
++            Path(mirrors_dir) if mirrors_dir is not None else _DEFAULT_MIRRORS
++        )
++        self.inner = inner if inner is not None else MirrorScrapeClient(
++            mirrors_dir=self.mirrors_dir
++        )
++
++    def scrape_as_markdown(self, url):
++        if url in ACME_SITE_URLS:
++            path = self.mirrors_dir / _ACME_MIRROR
++            if not path.is_file():
++                raise ValueError("unknown url: %s" % url)
++            return path.read_text(encoding="utf-8")
++        return self.inner.scrape_as_markdown(url)
++
++    def search_engine(self, query):
++        return self.inner.search_engine(query)
++
++
++def draft_company(url, client, router, session):
++    """Scrape the company site through the router and return a company dict.
++
++    Plans and prices come from structured extraction of the page. The three
++    known competitors are attached from the frozen company fixture. Missing
++    elasticity is filled with the labeled B2B default range.
++    """
++    if not isinstance(router, ToolRouter):
++        raise TypeError(
++            "draft_company requires a ToolRouter; the company site is never fetched around it"
++        )
++
++    def scrape_as_markdown(url):
++        return client.scrape_as_markdown(url)
++
++    router.register("brightdata.scrape_as_markdown", scrape_as_markdown)
++
++    emit(
++        session,
++        "orchestrator",
++        "doing",
++        "checking the company website",
++        tool="brightdata.scrape_as_markdown",
++        detail={"url": url},
++    )
++    content = router.call("brightdata.scrape_as_markdown", url=url)
++    if not isinstance(content, str):
++        content = "" if content is None else str(content)
++
++    if session.get("snapshots") is None:
++        session["snapshots"] = []
++    session["snapshots"].append(
++        {
++            "url": url,
++            "digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
++            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
++        }
++    )
++
++    facts = extract_facts(content)
++    page_price = extract_price(content)
++    name = _extract_name(content) or "Company"
++    plans = _extract_plans(content, page_price)
++    segments = _extract_segments(content)
++    used_default_elasticity = False
++    for plan in plans:
++        plan["segments"] = [
++            _with_elasticity_defaults(copy.deepcopy(segment))
++            for segment in segments
++        ]
++        if any(item.get("assumed") for item in plan["segments"]):
++            used_default_elasticity = True
++
++    competitors = _known_competitors()
++    company = {"name": name, "plans": plans, "competitors": competitors}
++
++    emit(
++        session,
++        "orchestrator",
++        "did",
++        "read the company website",
++        tool="brightdata.scrape_as_markdown",
++        detail={
++            "url": url,
++            "price": facts.get("price") if facts.get("price") is not None else page_price,
++        },
++    )
++    emit(
++        session,
++        "orchestrator",
++        "did",
++        _plans_sentence(plans),
++        detail={"plans": [{"id": item["id"], "price": item["price"]} for item in plans]},
++    )
++    if used_default_elasticity:
++        emit(
++            session,
++            "orchestrator",
++            "did",
++            "filled in a typical price-sensitivity range because none was listed, and marked it assumed, not measured",
++            detail={"elasticity": copy.deepcopy(DEFAULT_ELASTICITY), "assumed": True},
++        )
++    emit(
++        session,
++        "orchestrator",
++        "did",
++        "added the three known competitors with their listed prices",
++        detail={"competitors": copy.deepcopy(competitors)},
++    )
++
++    session["company"] = company
++    return company
++
++
++def _known_competitors():
++    with _FIXTURE_PATH.open(encoding="utf-8") as handle:
++        fixture = json.load(handle)
++    return copy.deepcopy(fixture["competitors"])
++
++
++def _extract_name(content):
++    match = _H1.search(content)
++    if match:
++        name = _plain(match.group(1))
++        if name:
++            return name
++    match = _TITLE.search(content)
++    if match:
++        name = _plain(match.group(1))
++        if name:
++            return name.split(" - ")[0].strip()
++    return None
++
++
++def _extract_plans(content, fallback_price):
++    plans = []
++    seen = set()
++    for match in _PLAN_TAG.finditer(content):
++        attrs = _attrs(match.group(2))
++        plan_id = (attrs.get("data-plan") or "").strip()
++        if not plan_id or plan_id.lower() in seen:
++            continue
++        body = match.group(3)
++        dollar = _DOLLAR.search(body)
++        if dollar:
++            price = _as_number(dollar.group(1))
++        elif fallback_price is not None:
++            price = _as_number(fallback_price)
++        else:
++            continue
++        plans.append({"id": plan_id, "price": price, "segments": []})
++        seen.add(plan_id.lower())
++    if not plans and fallback_price is not None:
++        raise ValueError(
++            "the page has a price but no plan name I can use; I will not guess a plan"
++        )
++    if not plans:
++        raise ValueError("I could not find a plan and price on that page")
++    return plans
++
++
++def _extract_segments(content):
++    segments = []
++    seen = set()
++    for match in _SEGMENT_TAG.finditer(content):
++        attrs = _attrs(match.group(1))
++        segment_id = (attrs.get("data-segment") or "").strip()
++        if not segment_id or segment_id.lower() in seen:
++            continue
++        customers = _optional_number(attrs.get("data-customers"), 0)
++        churn = _optional_number(attrs.get("data-monthly-churn"), 0)
++        segments.append(
++            {
++                "id": segment_id,
++                "customers": customers,
++                "monthly_churn": churn,
++            }
++        )
++        seen.add(segment_id.lower())
++    if not segments:
++        segments.append({"id": "customers", "customers": 0, "monthly_churn": 0})
++    return segments
++
++
++def _with_elasticity_defaults(segment):
++    if not _has_elasticity(segment.get("elasticity")):
++        segment["elasticity"] = copy.deepcopy(DEFAULT_ELASTICITY)
++        segment["assumed"] = True
++    if "cross_elasticity" not in segment:
++        segment["cross_elasticity"] = DEFAULT_CROSS_ELASTICITY
++    return segment
++
++
++def _has_elasticity(value):
++    if not isinstance(value, dict):
++        return False
++    return all(key in value for key in ("low", "mid", "high"))
++
++
++def _plans_sentence(plans):
++    if not plans:
++        return "did not find a plan on the company website"
++    parts = []
++    for plan in plans:
++        price = plan["price"]
++        shown = str(int(price)) if price == int(price) else str(price)
++        parts.append("the %s plan at $%s" % (plan["id"], shown))
++    if len(parts) == 1:
++        return "found %s" % parts[0]
++    return "found %s" % ", ".join(parts)
++
++
++def _attrs(blob):
++    found = {}
++    for match in _ATTR.finditer(blob or ""):
++        found[match.group(1).lower()] = html.unescape(match.group(3))
++    return found
++
++
++def _plain(text):
++    stripped = _TAGS.sub(" ", text or "")
++    stripped = html.unescape(stripped)
++    return re.sub(r"\s+", " ", stripped).strip()
++
++
++def _optional_number(raw, default):
++    if raw is None or str(raw).strip() == "":
++        return default
++    try:
++        return _as_number(raw)
++    except (TypeError, ValueError):
++        return default
++
++
++def _as_number(value):
++    number = float(value)
++    if number != number:
++        raise ValueError("not a number")
++    if number == int(number):
++        return int(number)
++    return number
+diff --git a/bootstrap/csv_merge.py b/bootstrap/csv_merge.py
+new file mode 100644
+index 0000000..abd1d76
+--- /dev/null
++++ b/bootstrap/csv_merge.py
+@@ -0,0 +1,176 @@
++"""Merge a segment CSV into a drafted company summary."""
++
++import csv
++import io
++import re
++
++REQUIRED_COLUMNS = ("segment", "customers", "monthly_churn")
++
++
++class CsvMergeError(ValueError):
++    """Raised when a CSV row cannot be applied. The message lists every problem."""
++
++
++def merge_csv(company, csv_text):
++    """Update matching segments in place and return unmatched rows.
++
++    Matching is by segment id (case-insensitive) across every plan.
++    Unmatched rows are returned for the user to assign or discard.
++    Malformed rows abort the merge with CsvMergeError; company is unchanged.
++    """
++    if not isinstance(company, dict):
++        raise TypeError("company must be an object")
++    if not isinstance(csv_text, str):
++        raise TypeError("csv_text must be a string")
++
++    rows, problems = _parse_rows(csv_text)
++    if problems:
++        raise CsvMergeError(_loud_problems(problems))
++
++    index = _segment_index(company)
++    unmatched = []
++    updates = []
++    for row in rows:
++        key = row["segment"].lower()
++        targets = index.get(key)
++        if not targets:
++            unmatched.append(
++                {
++                    "segment": row["segment"],
++                    "customers": row["customers"],
++                    "monthly_churn": row["monthly_churn"],
++                }
++            )
++            continue
++        updates.append((targets, row))
++
++    for targets, row in updates:
++        for segment in targets:
++            segment["customers"] = row["customers"]
++            segment["monthly_churn"] = row["monthly_churn"]
++    return unmatched
++
++
++def _parse_rows(csv_text):
++    problems = []
++    if not csv_text.strip():
++        problems.append("the CSV is empty")
++        return [], problems
++
++    handle = io.StringIO(csv_text)
++    try:
++        reader = csv.DictReader(handle)
++    except csv.Error as exc:
++        problems.append("the CSV could not be read: %s" % exc)
++        return [], problems
++
++    if not reader.fieldnames:
++        problems.append("the CSV has no header row")
++        return [], problems
++
++    header_map = {}
++    for name in reader.fieldnames:
++        if name is None:
++            continue
++        key = _norm_header(name)
++        if key:
++            header_map[key] = name
++    missing = [column for column in REQUIRED_COLUMNS if column not in header_map]
++    if missing:
++        problems.append(
++            "CSV must have columns segment, customers, monthly_churn (missing: %s)"
++            % ", ".join(missing)
++        )
++        return [], problems
++
++    rows = []
++    for line_number, raw in enumerate(reader, start=2):
++        if raw is None:
++            problems.append("line %s is malformed" % line_number)
++            continue
++        if _row_blank(raw):
++            continue
++        if None in raw:
++            problems.append(
++                "line %s has more fields than the header"
++                % line_number
++            )
++            continue
++        segment = raw.get(header_map["segment"])
++        customers_raw = raw.get(header_map["customers"])
++        churn_raw = raw.get(header_map["monthly_churn"])
++        segment_id = (segment or "").strip()
++        if not segment_id:
++            problems.append("line %s is missing a segment id" % line_number)
++            continue
++        customers, customers_error = _parse_customers(customers_raw)
++        if customers_error:
++            problems.append("line %s: %s" % (line_number, customers_error))
++            continue
++        churn, churn_error = _parse_churn(churn_raw)
++        if churn_error:
++            problems.append("line %s: %s" % (line_number, churn_error))
++            continue
++        rows.append(
++            {
++                "segment": segment_id,
++                "customers": customers,
++                "monthly_churn": churn,
++            }
++        )
++    return rows, problems
++
++
++def _loud_problems(problems):
++    if len(problems) == 1:
++        return "CSV rejected: %s" % problems[0]
++    numbered = "; ".join(problems)
++    return "CSV rejected (%s problems): %s" % (len(problems), numbered)
++
++
++def _norm_header(name):
++    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
++
++
++def _row_blank(raw):
++    values = [value for value in raw.values() if value is not None]
++    return not any(str(value).strip() for value in values)
++
++
++def _parse_customers(raw):
++    if raw is None or str(raw).strip() == "":
++        return None, "customers is missing"
++    text = str(raw).strip().replace(",", "")
++    try:
++        number = float(text)
++    except ValueError:
++        return None, "customers %r is not a number" % raw
++    if number != number or number < 0:
++        return None, "customers %r is not a valid count" % raw
++    if number == int(number):
++        return int(number), None
++    return number, None
++
++
++def _parse_churn(raw):
++    if raw is None or str(raw).strip() == "":
++        return None, "monthly_churn is missing"
++    text = str(raw).strip()
++    try:
++        number = float(text)
++    except ValueError:
++        return None, "monthly_churn %r is not a number" % raw
++    if number != number or number < 0 or number > 1:
++        return None, "monthly_churn %r must be a fraction between 0 and 1" % raw
++    return number, None
++
++
++def _segment_index(company):
++    index = {}
++    for plan in company.get("plans") or []:
++        for segment in plan.get("segments") or []:
++            key = str(segment.get("id", "")).strip().lower()
++            if not key:
++                continue
++            index.setdefault(key, []).append(segment)
++    return index
+diff --git a/bootstrap/move_parse.py b/bootstrap/move_parse.py
+new file mode 100644
+index 0000000..4637e32
+--- /dev/null
++++ b/bootstrap/move_parse.py
+@@ -0,0 +1,286 @@
++"""Parse one typed sentence into a move, or a typed rejection.
++
++Questions and non-price requests never produce a move, so nothing downstream
++builds a tree from them. Plan names are matched against the company; a name
++that is not on the company is refused rather than invented.
++"""
++
++from datetime import date, datetime, timedelta
++import re
++
++DEFAULT_EFFECTIVE_DAYS = 9
++ACTION = "open_pr"
++
++_WEEKDAYS = {
++    "monday": 0,
++    "tuesday": 1,
++    "wednesday": 2,
++    "thursday": 3,
++    "friday": 4,
++    "saturday": 5,
++    "sunday": 6,
++}
++
++_MONTHS = {
++    "jan": 1,
++    "january": 1,
++    "feb": 2,
++    "february": 2,
++    "mar": 3,
++    "march": 3,
++    "apr": 4,
++    "april": 4,
++    "may": 5,
++    "jun": 6,
++    "june": 6,
++    "jul": 7,
++    "july": 7,
++    "aug": 8,
++    "august": 8,
++    "sep": 9,
++    "sept": 9,
++    "september": 9,
++    "oct": 10,
++    "october": 10,
++    "nov": 11,
++    "november": 11,
++    "dec": 12,
++    "december": 12,
++}
++
++_PRICE_VERB = re.compile(
++    r"(?i)\b(raise|increase|hike|cut|lower|drop|reduce|decrease|change|set)\b"
++)
++_PLAN_AFTER_VERB = re.compile(
++    r"(?i)\b(?:raise|increase|hike|cut|lower|drop|reduce|decrease|change|set)\s+"
++    r"(?:the\s+)?([A-Za-z][A-Za-z0-9_-]*)"
++)
++_PLAN_STOPWORDS = frozenset(
++    {
++        "prices",
++        "price",
++        "plan",
++        "plans",
++        "our",
++        "my",
++        "a",
++        "an",
++        "it",
++        "this",
++        "that",
++        "from",
++        "to",
++        "by",
++        "for",
++        "on",
++        "your",
++    }
++)
++_FROM_TO = re.compile(
++    r"(?i)from\s+\$?\s*(\d+(?:\.\d+)?)\s+to\s+\$?\s*(\d+(?:\.\d+)?)"
++)
++_TO_PRICE = re.compile(r"(?i)\bto\s+\$?\s*(\d+(?:\.\d+)?)\b")
++_QUESTION_OPENER = re.compile(
++    r"(?i)^\s*(should|could|would|can|may|shall|do|does|did|is|are|was|"
++    r"were|what|why|how|when|who|whom|which)\b"
++)
++_NEXT_WEEKDAY = re.compile(
++    r"(?i)\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
++)
++_ISO_DATE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
++_MONTH_DAY = re.compile(
++    r"(?i)\b(?:on\s+)?("
++    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
++    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
++    r"nov(?:ember)?|dec(?:ember)?"
++    r")\s+(\d{1,2})(?:,?\s*(\d{4}))?"
++)
++
++_QUESTION_REPLY = (
++    "Tell me a specific price change, like: Raise Pro from $49 to $59."
++)
++_OUT_OF_SCOPE_REPLY = (
++    "Only price moves on one plan are supported today. "
++    "Describe a price change, like: Raise Pro from $49 to $59."
++)
++
++
++class Rejection:
++    """Typed refusal. kind is 'question', 'out_of_scope', or 'unknown_plan'."""
++
++    def __init__(self, kind, reply):
++        self.kind = kind
++        self.reply = reply
++
++    def __repr__(self):
++        return "Rejection(kind=%r, reply=%r)" % (self.kind, self.reply)
++
++    def __eq__(self, other):
++        return (
++            isinstance(other, Rejection)
++            and self.kind == other.kind
++            and self.reply == other.reply
++        )
++
++
++def parse_move(text, company, today=None):
++    """Return a move dict or a Rejection. Does not mutate company or any tree."""
++    if not isinstance(text, str) or not text.strip():
++        return Rejection("question", _QUESTION_REPLY)
++
++    stripped = text.strip()
++    if _is_question(stripped):
++        return Rejection("question", _QUESTION_REPLY)
++
++    from_price, to_price = _prices(stripped)
++    plan = _named_plan(stripped, company)
++
++    if _PRICE_VERB.search(stripped) and to_price is not None:
++        if plan is None:
++            return _unknown_plan(stripped, company)
++        if from_price is None:
++            from_price = _as_number(plan["price"])
++        effective = _effective_date(stripped, today)
++        return {
++            "plan": plan["id"],
++            "from": from_price,
++            "to": to_price,
++            "action": ACTION,
++            "effective": effective.isoformat(),
++        }
++
++    if _PRICE_VERB.search(stripped):
++        return Rejection("question", _QUESTION_REPLY)
++
++    return Rejection("out_of_scope", _OUT_OF_SCOPE_REPLY)
++
++
++def _is_question(text):
++    if text.endswith("?"):
++        return True
++    return bool(_QUESTION_OPENER.match(text))
++
++
++def _prices(text):
++    match = _FROM_TO.search(text)
++    if match:
++        return _as_number(match.group(1)), _as_number(match.group(2))
++    match = _TO_PRICE.search(text)
++    if match:
++        return None, _as_number(match.group(1))
++    return None, None
++
++
++def _named_plan(text, company):
++    plans = list(company.get("plans") or [])
++    mentioned = _mentioned_plan_token(text)
++    if mentioned is not None:
++        for plan in plans:
++            if str(plan.get("id", "")).strip().lower() == mentioned.lower():
++                return plan
++        return None
++    lowered = text.lower()
++    ranked = sorted(
++        plans, key=lambda item: len(str(item.get("id", ""))), reverse=True
++    )
++    for plan in ranked:
++        plan_id = str(plan.get("id", "")).strip()
++        if not plan_id:
++            continue
++        if re.search(r"\b%s\b" % re.escape(plan_id.lower()), lowered):
++            return plan
++    if len(plans) == 1:
++        return plans[0]
++    return None
++
++
++def _mentioned_plan_token(text):
++    match = _PLAN_AFTER_VERB.search(text)
++    if not match:
++        return None
++    token = match.group(1)
++    if token.lower() in _PLAN_STOPWORDS:
++        return None
++    return token
++
++
++def _unknown_plan(text, company):
++    names = []
++    for plan in company.get("plans") or []:
++        plan_id = str(plan.get("id", "")).strip()
++        if plan_id:
++            names.append(plan_id)
++    mentioned = _mentioned_plan_token(text)
++    if names:
++        listed = ", ".join(names)
++        if mentioned:
++            reply = (
++                "I will not guess a plan called %s; it is not on the company. "
++                "The plans I have are: %s. "
++                "Tell me which of those to change and the new price."
++            ) % (mentioned, listed)
++        else:
++            reply = (
++                "I will not guess a plan that is not on the company. "
++                "The plans I have are: %s. "
++                "Tell me which of those to change and the new price."
++            ) % listed
++    else:
++        reply = (
++            "I will not guess a plan that is not on the company. "
++            "Add a plan on the company card first, then tell me the price change."
++        )
++    return Rejection("unknown_plan", reply)
++
++
++def _effective_date(text, today):
++    today_date = _as_date(today)
++    weekday = _NEXT_WEEKDAY.search(text)
++    if weekday:
++        return _next_weekday(today_date, weekday.group(1))
++    iso = _ISO_DATE.search(text)
++    if iso:
++        return date.fromisoformat(iso.group(1))
++    month_day = _MONTH_DAY.search(text)
++    if month_day:
++        month = _MONTHS[month_day.group(1).lower()]
++        day = int(month_day.group(2))
++        year = int(month_day.group(3)) if month_day.group(3) else today_date.year
++        try:
++            resolved = date(year, month, day)
++        except ValueError:
++            return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
++        if month_day.group(3) is None and resolved < today_date:
++            try:
++                resolved = date(year + 1, month, day)
++            except ValueError:
++                return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
++        return resolved
++    return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
++
++
++def _next_weekday(today_date, name):
++    target = _WEEKDAYS[name.lower()]
++    ahead = (target - today_date.weekday()) % 7
++    if ahead == 0:
++        ahead = 7
++    return today_date + timedelta(days=ahead)
++
++
++def _as_date(value):
++    if value is None:
++        return date.today()
++    if isinstance(value, datetime):
++        return value.date()
++    if isinstance(value, date):
++        return value
++    if isinstance(value, str):
++        return date.fromisoformat(value[:10])
++    raise TypeError("today must be a date")
++
++
++def _as_number(value):
++    number = float(value)
++    if number == int(number):
++        return int(number)
++    return number
+diff --git a/mirrors/acme-stay.html b/mirrors/acme-stay.html
+new file mode 100644
+index 0000000..8be2848
+--- /dev/null
++++ b/mirrors/acme-stay.html
+@@ -0,0 +1,33 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++  <meta charset="utf-8">
++  <title>Acme Stay</title>
++</head>
++<body>
++  <header>
++    <h1>Acme Stay</h1>
++    <p>Software for independent vacation-rental hosts.</p>
++  </header>
++  <main>
++    <article data-plan="pro">
++      <h2>Pro</h2>
++      <p class="price">$49<span> / month</span></p>
++      <ul>
++        <li>Unlimited listings</li>
++        <li>Dynamic nightly rates</li>
++        <li>Email support on weekdays</li>
++      </ul>
++    </article>
++    <section>
++      <h2>Who uses Pro</h2>
++      <p data-segment="smb" data-customers="300" data-monthly-churn="0.04">
++        Small hosts running a handful of listings.
++      </p>
++      <p data-segment="mid" data-customers="120" data-monthly-churn="0.02">
++        Growing portfolios with a mid-size team.
++      </p>
++    </section>
++  </main>
++</body>
++</html>
+diff --git a/test_bootstrap.py b/test_bootstrap.py
+new file mode 100644
+index 0000000..8a3f1a6
+--- /dev/null
++++ b/test_bootstrap.py
+@@ -0,0 +1,286 @@
++"""Stdlib tests for slice S5 company bootstrap and move parsing."""
++
++import copy
++import json
++import tempfile
++import unittest
++from datetime import date
++from pathlib import Path
++
++from bootstrap import (
++    ACME_SITE_URL,
++    DEFAULT_ELASTICITY,
++    AcmeMirrorClient,
++    CsvMergeError,
++    Rejection,
++    draft_company,
++    merge_csv,
++    parse_move,
++)
++from contracts.test_contracts import load as load_contract
++from contracts.test_contracts import validate
++from orchestrator import SessionStore, ToolRouter, new_session
++
++ROOT = Path(__file__).resolve().parent
++COMPANY_FIXTURE = ROOT / "contracts" / "fixtures" / "company.json"
++MOVE_FIXTURE = ROOT / "contracts" / "fixtures" / "move.json"
++ACME_MIRROR = ROOT / "mirrors" / "acme-stay.html"
++DEMO_SENTENCE = "Raise Pro from $49 to $59"
++DEMO_SENTENCE_WITH_DATE = (
++    "Raise Pro from $49 to $59 and email customers next Monday"
++)
++
++
++def load_company():
++    with COMPANY_FIXTURE.open(encoding="utf-8") as handle:
++        return json.load(handle)
++
++
++def load_move():
++    with MOVE_FIXTURE.open(encoding="utf-8") as handle:
++        return json.load(handle)
++
++
++class TestParseMove(unittest.TestCase):
++    def test_demo_sentence_matches_move_fixture(self):
++        move = parse_move(
++            DEMO_SENTENCE,
++            load_company(),
++            today=date(2026, 8, 29),
++        )
++        self.assertEqual(move, load_move())
++        self.assertEqual(move["plan"], "pro")
++        self.assertEqual(move["from"], 49)
++        self.assertEqual(move["to"], 59)
++        self.assertEqual(move["action"], "open_pr")
++        self.assertEqual(move["effective"], "2026-09-07")
++
++    def test_demo_sentence_with_next_monday_from_fixed_today(self):
++        move = parse_move(
++            DEMO_SENTENCE_WITH_DATE,
++            load_company(),
++            today=date(2026, 9, 1),
++        )
++        self.assertEqual(move["plan"], "pro")
++        self.assertEqual(move["from"], 49)
++        self.assertEqual(move["to"], 59)
++        self.assertEqual(move["action"], "open_pr")
++        self.assertEqual(move["effective"], "2026-09-07")
++
++    def test_next_monday_from_a_saturday_is_two_days_later(self):
++        move = parse_move(
++            DEMO_SENTENCE_WITH_DATE,
++            load_company(),
++            today=date(2026, 8, 29),
++        )
++        self.assertEqual(move["effective"], "2026-08-31")
++
++    def test_next_monday_from_a_monday_is_the_following_week(self):
++        move = parse_move(
++            DEMO_SENTENCE_WITH_DATE,
++            load_company(),
++            today=date(2026, 8, 31),
++        )
++        self.assertEqual(move["effective"], "2026-09-07")
++
++    def test_default_effective_is_today_plus_nine_days(self):
++        move = parse_move(
++            DEMO_SENTENCE,
++            load_company(),
++            today=date(2026, 8, 20),
++        )
++        self.assertEqual(move["effective"], "2026-08-29")
++
++    def test_question_is_rejected_and_does_not_touch_a_tree(self):
++        company = load_company()
++        tree = {"nodes": [{"id": "root", "children": ["a"]}]}
++        snapshot_company = copy.deepcopy(company)
++        snapshot_tree = copy.deepcopy(tree)
++        result = parse_move("Should I raise prices?", company)
++        self.assertIsInstance(result, Rejection)
++        self.assertEqual(result.kind, "question")
++        self.assertIn("specific", result.reply.lower())
++        self.assertNotIn("tree", result.reply.lower())
++        self.assertEqual(company, snapshot_company)
++        self.assertEqual(tree, snapshot_tree)
++
++    def test_out_of_scope_is_rejected_and_does_not_touch_a_tree(self):
++        company = load_company()
++        tree = {"nodes": [{"id": "root"}]}
++        snapshot_company = copy.deepcopy(company)
++        snapshot_tree = copy.deepcopy(tree)
++        result = parse_move("Launch a new onboarding flow", company)
++        self.assertIsInstance(result, Rejection)
++        self.assertEqual(result.kind, "out_of_scope")
++        self.assertIn("price", result.reply.lower())
++        self.assertEqual(company, snapshot_company)
++        self.assertEqual(tree, snapshot_tree)
++
++    def test_unknown_plan_is_not_guessed(self):
++        result = parse_move(
++            "Raise Enterprise from $99 to $129",
++            load_company(),
++            today=date(2026, 8, 29),
++        )
++        self.assertIsInstance(result, Rejection)
++        self.assertEqual(result.kind, "unknown_plan")
++        self.assertIn("not on the company", result.reply.lower())
++        self.assertNotIn("enterprise", [plan["id"] for plan in load_company()["plans"]])
++
++
++class TestDraftCompany(unittest.TestCase):
++    def test_draft_validates_against_company_schema(self):
++        session = new_session()
++        router = ToolRouter(session)
++        company = draft_company(
++            ACME_SITE_URL,
++            AcmeMirrorClient(),
++            router,
++            session,
++        )
++        schema = load_contract("company.schema.json")
++        self.assertEqual(validate(company, schema), [])
++        self.assertEqual(company["name"], "Acme Stay")
++        self.assertEqual(len(company["plans"]), 1)
++        self.assertEqual(company["plans"][0]["id"], "pro")
++        self.assertEqual(company["plans"][0]["price"], 49)
++        self.assertEqual(
++            [item["id"] for item in company["plans"][0]["segments"]],
++            ["smb", "mid"],
++        )
++        self.assertEqual(
++            [item["name"] for item in company["competitors"]],
++            ["Rival A", "Rival B", "Rival C"],
++        )
++        self.assertEqual(
++            [item["price"] for item in company["competitors"]],
++            [45, 52, 47],
++        )
++
++    def test_missing_elasticity_gets_labeled_b2b_default(self):
++        session = new_session()
++        company = draft_company(
++            ACME_SITE_URL,
++            AcmeMirrorClient(),
++            ToolRouter(session),
++            session,
++        )
++        for segment in company["plans"][0]["segments"]:
++            self.assertEqual(segment["elasticity"], DEFAULT_ELASTICITY)
++            self.assertIs(segment["assumed"], True)
++            self.assertEqual(segment["cross_elasticity"], 0.4)
++        html = ACME_MIRROR.read_text(encoding="utf-8")
++        self.assertNotIn("elasticity", html.lower())
++        self.assertNotIn("-0.9", html)
++
++    def test_scrape_goes_through_the_router_and_is_traced_in_plain_language(self):
++        events = []
++        original = ToolRouter.call
++
++        def tracking_call(self, name, **kwargs):
++            events.append(("router", name, kwargs.get("url")))
++            return original(self, name, **kwargs)
++
++        ToolRouter.call = tracking_call
++        try:
++            session = new_session()
++            draft_company(
++                ACME_SITE_URL,
++                AcmeMirrorClient(),
++                ToolRouter(session),
++                session,
++            )
++        finally:
++            ToolRouter.call = original
++
++        scrapes = [
++            event
++            for event in events
++            if event[0] == "router" and event[1] == "brightdata.scrape_as_markdown"
++        ]
++        self.assertEqual(len(scrapes), 1)
++        self.assertEqual(scrapes[0][2], ACME_SITE_URL)
++
++        texts = " ".join(event["text"].lower() for event in session["trace"])
++        self.assertIn("company website", texts)
++        self.assertIn("pro", texts)
++        self.assertIn("assumed, not measured", texts)
++        self.assertIn("competitors", texts)
++        self.assertNotIn("elasticity", texts)
++        self.assertNotIn("yaml", texts)
++
++        with self.assertRaises(TypeError):
++            draft_company(ACME_SITE_URL, AcmeMirrorClient(), object(), new_session())
++
++    def test_corrected_value_survives_session_store_round_trip(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            session = new_session()
++            company = draft_company(
++                ACME_SITE_URL,
++                AcmeMirrorClient(),
++                ToolRouter(session),
++                session,
++            )
++            company["plans"][0]["price"] = 51
++            session["company"] = company
++            store = SessionStore(tmp)
++            store.save(session)
++            loaded = store.load()
++            self.assertEqual(loaded["company"]["plans"][0]["price"], 51)
++            self.assertNotEqual(loaded["company"]["plans"][0]["price"], 49)
++            self.assertEqual(loaded["company"]["name"], "Acme Stay")
++
++
++class TestMergeCsv(unittest.TestCase):
++    def test_matching_rows_update_in_place_and_unmatched_are_surfaced(self):
++        company = load_company()
++        smb = company["plans"][0]["segments"][0]
++        self.assertEqual(smb["id"], "smb")
++        self.assertEqual(smb["customers"], 300)
++        csv_text = (
++            "segment,customers,monthly_churn\n"
++            "smb,310,0.05\n"
++            "enterprise,10,0.01\n"
++        )
++        unmatched = merge_csv(company, csv_text)
++        self.assertIs(company["plans"][0]["segments"][0], smb)
++        self.assertEqual(smb["customers"], 310)
++        self.assertEqual(smb["monthly_churn"], 0.05)
++        self.assertEqual(company["plans"][0]["segments"][1]["customers"], 120)
++        self.assertEqual(
++            unmatched,
++            [{"segment": "enterprise", "customers": 10, "monthly_churn": 0.01}],
++        )
++
++    def test_malformed_rows_are_rejected_loudly_and_company_is_unchanged(self):
++        company = load_company()
++        snapshot = copy.deepcopy(company)
++        csv_text = (
++            "segment,customers,monthly_churn\n"
++            "smb,many,0.04\n"
++        )
++        with self.assertRaises(CsvMergeError) as ctx:
++            merge_csv(company, csv_text)
++        message = str(ctx.exception).lower()
++        self.assertIn("rejected", message)
++        self.assertIn("customers", message)
++        self.assertEqual(company, snapshot)
++
++    def test_missing_columns_are_rejected(self):
++        company = load_company()
++        with self.assertRaises(CsvMergeError) as ctx:
++            merge_csv(company, "segment,customers\nsmb,300\n")
++        self.assertIn("monthly_churn", str(ctx.exception))
++
++    def test_case_insensitive_segment_match(self):
++        company = load_company()
++        unmatched = merge_csv(
++            company,
++            "segment,customers,monthly_churn\nSMB,301,0.03\n",
++        )
++        self.assertEqual(unmatched, [])
++        self.assertEqual(company["plans"][0]["segments"][0]["customers"], 301)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+codex
+The comparison is pinned cleanly: `main...HEAD` contains only the six requested S5 files across two commits. I’ve also confirmed the repository has no separate coding-standards file in scope, so the standards axis is limited to the supplied AGENTS instructions and review-smell baseline. Next I’m exercising the implementation beyond its own tests.
+exec
+/bin/zsh -lc 'python3 -m unittest test_bootstrap -v' in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ exited 1 in 0ms:
+test_corrected_value_survives_session_store_round_trip (test_bootstrap.TestDraftCompany.test_corrected_value_survives_session_store_round_trip) ... ERROR
+test_draft_validates_against_company_schema (test_bootstrap.TestDraftCompany.test_draft_validates_against_company_schema) ... ok
+test_missing_elasticity_gets_labeled_b2b_default (test_bootstrap.TestDraftCompany.test_missing_elasticity_gets_labeled_b2b_default) ... ok
+test_scrape_goes_through_the_router_and_is_traced_in_plain_language (test_bootstrap.TestDraftCompany.test_scrape_goes_through_the_router_and_is_traced_in_plain_language) ... ok
+test_case_insensitive_segment_match (test_bootstrap.TestMergeCsv.test_case_insensitive_segment_match) ... ok
+test_malformed_rows_are_rejected_loudly_and_company_is_unchanged (test_bootstrap.TestMergeCsv.test_malformed_rows_are_rejected_loudly_and_company_is_unchanged) ... ok
+test_matching_rows_update_in_place_and_unmatched_are_surfaced (test_bootstrap.TestMergeCsv.test_matching_rows_update_in_place_and_unmatched_are_surfaced) ... ok
+test_missing_columns_are_rejected (test_bootstrap.TestMergeCsv.test_missing_columns_are_rejected) ... ok
+test_default_effective_is_today_plus_nine_days (test_bootstrap.TestParseMove.test_default_effective_is_today_plus_nine_days) ... ok
+test_demo_sentence_matches_move_fixture (test_bootstrap.TestParseMove.test_demo_sentence_matches_move_fixture) ... ok
+test_demo_sentence_with_next_monday_from_fixed_today (test_bootstrap.TestParseMove.test_demo_sentence_with_next_monday_from_fixed_today) ... ok
+test_next_monday_from_a_monday_is_the_following_week (test_bootstrap.TestParseMove.test_next_monday_from_a_monday_is_the_following_week) ... ok
+test_next_monday_from_a_saturday_is_two_days_later (test_bootstrap.TestParseMove.test_next_monday_from_a_saturday_is_two_days_later) ... ok
+test_out_of_scope_is_rejected_and_does_not_touch_a_tree (test_bootstrap.TestParseMove.test_out_of_scope_is_rejected_and_does_not_touch_a_tree) ... ok
+test_question_is_rejected_and_does_not_touch_a_tree (test_bootstrap.TestParseMove.test_question_is_rejected_and_does_not_touch_a_tree) ... ok
+test_unknown_plan_is_not_guessed (test_bootstrap.TestParseMove.test_unknown_plan_is_not_guessed) ... ok
+
+======================================================================
+ERROR: test_corrected_value_survives_session_store_round_trip (test_bootstrap.TestDraftCompany.test_corrected_value_survives_session_store_round_trip)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/test_bootstrap.py", line 216, in test_corrected_value_survives_session_store_round_trip
+    with tempfile.TemporaryDirectory() as tmp:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 907, in __init__
+    self.name = mkdtemp(suffix, prefix, dir)
+                ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 374, in mkdtemp
+    prefix, suffix, dir, output_type = _sanitize_params(prefix, suffix, dir)
+                                       ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 126, in _sanitize_params
+    dir = gettempdir()
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 316, in gettempdir
+    return _os.fsdecode(_gettempdir())
+                        ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 309, in _gettempdir
+    tempdir = _get_default_tempdir()
+  File "/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 224, in _get_default_tempdir
+    raise FileNotFoundError(_errno.ENOENT,
+                            "No usable temporary directory found in %s" %
+                            dirlist)
+FileNotFoundError: [Errno 2] No usable temporary directory found in ['/var/folders/bv/yzh7t4xn2cdf0kd3cytmlc0r0000gn/T/', '/tmp', '/var/tmp', '/usr/tmp', '/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove']
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.004s
+
+FAILED (errors=1)
+
+exec
+/bin/zsh -lc 'nl -ba bootstrap/move_parse.py && nl -ba bootstrap/company_draft.py && nl -ba bootstrap/csv_merge.py && nl -ba test_bootstrap.py' in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+     1	"""Parse one typed sentence into a move, or a typed rejection.
+     2	
+     3	Questions and non-price requests never produce a move, so nothing downstream
+     4	builds a tree from them. Plan names are matched against the company; a name
+     5	that is not on the company is refused rather than invented.
+     6	"""
+     7	
+     8	from datetime import date, datetime, timedelta
+     9	import re
+    10	
+    11	DEFAULT_EFFECTIVE_DAYS = 9
+    12	ACTION = "open_pr"
+    13	
+    14	_WEEKDAYS = {
+    15	    "monday": 0,
+    16	    "tuesday": 1,
+    17	    "wednesday": 2,
+    18	    "thursday": 3,
+    19	    "friday": 4,
+    20	    "saturday": 5,
+    21	    "sunday": 6,
+    22	}
+    23	
+    24	_MONTHS = {
+    25	    "jan": 1,
+    26	    "january": 1,
+    27	    "feb": 2,
+    28	    "february": 2,
+    29	    "mar": 3,
+    30	    "march": 3,
+    31	    "apr": 4,
+    32	    "april": 4,
+    33	    "may": 5,
+    34	    "jun": 6,
+    35	    "june": 6,
+    36	    "jul": 7,
+    37	    "july": 7,
+    38	    "aug": 8,
+    39	    "august": 8,
+    40	    "sep": 9,
+    41	    "sept": 9,
+    42	    "september": 9,
+    43	    "oct": 10,
+    44	    "october": 10,
+    45	    "nov": 11,
+    46	    "november": 11,
+    47	    "dec": 12,
+    48	    "december": 12,
+    49	}
+    50	
+    51	_PRICE_VERB = re.compile(
+    52	    r"(?i)\b(raise|increase|hike|cut|lower|drop|reduce|decrease|change|set)\b"
+    53	)
+    54	_PLAN_AFTER_VERB = re.compile(
+    55	    r"(?i)\b(?:raise|increase|hike|cut|lower|drop|reduce|decrease|change|set)\s+"
+    56	    r"(?:the\s+)?([A-Za-z][A-Za-z0-9_-]*)"
+    57	)
+    58	_PLAN_STOPWORDS = frozenset(
+    59	    {
+    60	        "prices",
+    61	        "price",
+    62	        "plan",
+    63	        "plans",
+    64	        "our",
+    65	        "my",
+    66	        "a",
+    67	        "an",
+    68	        "it",
+    69	        "this",
+    70	        "that",
+    71	        "from",
+    72	        "to",
+    73	        "by",
+    74	        "for",
+    75	        "on",
+    76	        "your",
+    77	    }
+    78	)
+    79	_FROM_TO = re.compile(
+    80	    r"(?i)from\s+\$?\s*(\d+(?:\.\d+)?)\s+to\s+\$?\s*(\d+(?:\.\d+)?)"
+    81	)
+    82	_TO_PRICE = re.compile(r"(?i)\bto\s+\$?\s*(\d+(?:\.\d+)?)\b")
+    83	_QUESTION_OPENER = re.compile(
+    84	    r"(?i)^\s*(should|could|would|can|may|shall|do|does|did|is|are|was|"
+    85	    r"were|what|why|how|when|who|whom|which)\b"
+    86	)
+    87	_NEXT_WEEKDAY = re.compile(
+    88	    r"(?i)\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    89	)
+    90	_ISO_DATE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+    91	_MONTH_DAY = re.compile(
+    92	    r"(?i)\b(?:on\s+)?("
+    93	    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    94	    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
+    95	    r"nov(?:ember)?|dec(?:ember)?"
+    96	    r")\s+(\d{1,2})(?:,?\s*(\d{4}))?"
+    97	)
+    98	
+    99	_QUESTION_REPLY = (
+   100	    "Tell me a specific price change, like: Raise Pro from $49 to $59."
+   101	)
+   102	_OUT_OF_SCOPE_REPLY = (
+   103	    "Only price moves on one plan are supported today. "
+   104	    "Describe a price change, like: Raise Pro from $49 to $59."
+   105	)
+   106	
+   107	
+   108	class Rejection:
+   109	    """Typed refusal. kind is 'question', 'out_of_scope', or 'unknown_plan'."""
+   110	
+   111	    def __init__(self, kind, reply):
+   112	        self.kind = kind
+   113	        self.reply = reply
+   114	
+   115	    def __repr__(self):
+   116	        return "Rejection(kind=%r, reply=%r)" % (self.kind, self.reply)
+   117	
+   118	    def __eq__(self, other):
+   119	        return (
+   120	            isinstance(other, Rejection)
+   121	            and self.kind == other.kind
+   122	            and self.reply == other.reply
+   123	        )
+   124	
+   125	
+   126	def parse_move(text, company, today=None):
+   127	    """Return a move dict or a Rejection. Does not mutate company or any tree."""
+   128	    if not isinstance(text, str) or not text.strip():
+   129	        return Rejection("question", _QUESTION_REPLY)
+   130	
+   131	    stripped = text.strip()
+   132	    if _is_question(stripped):
+   133	        return Rejection("question", _QUESTION_REPLY)
+   134	
+   135	    from_price, to_price = _prices(stripped)
+   136	    plan = _named_plan(stripped, company)
+   137	
+   138	    if _PRICE_VERB.search(stripped) and to_price is not None:
+   139	        if plan is None:
+   140	            return _unknown_plan(stripped, company)
+   141	        if from_price is None:
+   142	            from_price = _as_number(plan["price"])
+   143	        effective = _effective_date(stripped, today)
+   144	        return {
+   145	            "plan": plan["id"],
+   146	            "from": from_price,
+   147	            "to": to_price,
+   148	            "action": ACTION,
+   149	            "effective": effective.isoformat(),
+   150	        }
+   151	
+   152	    if _PRICE_VERB.search(stripped):
+   153	        return Rejection("question", _QUESTION_REPLY)
+   154	
+   155	    return Rejection("out_of_scope", _OUT_OF_SCOPE_REPLY)
+   156	
+   157	
+   158	def _is_question(text):
+   159	    if text.endswith("?"):
+   160	        return True
+   161	    return bool(_QUESTION_OPENER.match(text))
+   162	
+   163	
+   164	def _prices(text):
+   165	    match = _FROM_TO.search(text)
+   166	    if match:
+   167	        return _as_number(match.group(1)), _as_number(match.group(2))
+   168	    match = _TO_PRICE.search(text)
+   169	    if match:
+   170	        return None, _as_number(match.group(1))
+   171	    return None, None
+   172	
+   173	
+   174	def _named_plan(text, company):
+   175	    plans = list(company.get("plans") or [])
+   176	    mentioned = _mentioned_plan_token(text)
+   177	    if mentioned is not None:
+   178	        for plan in plans:
+   179	            if str(plan.get("id", "")).strip().lower() == mentioned.lower():
+   180	                return plan
+   181	        return None
+   182	    lowered = text.lower()
+   183	    ranked = sorted(
+   184	        plans, key=lambda item: len(str(item.get("id", ""))), reverse=True
+   185	    )
+   186	    for plan in ranked:
+   187	        plan_id = str(plan.get("id", "")).strip()
+   188	        if not plan_id:
+   189	            continue
+   190	        if re.search(r"\b%s\b" % re.escape(plan_id.lower()), lowered):
+   191	            return plan
+   192	    if len(plans) == 1:
+   193	        return plans[0]
+   194	    return None
+   195	
+   196	
+   197	def _mentioned_plan_token(text):
+   198	    match = _PLAN_AFTER_VERB.search(text)
+   199	    if not match:
+   200	        return None
+   201	    token = match.group(1)
+   202	    if token.lower() in _PLAN_STOPWORDS:
+   203	        return None
+   204	    return token
+   205	
+   206	
+   207	def _unknown_plan(text, company):
+   208	    names = []
+   209	    for plan in company.get("plans") or []:
+   210	        plan_id = str(plan.get("id", "")).strip()
+   211	        if plan_id:
+   212	            names.append(plan_id)
+   213	    mentioned = _mentioned_plan_token(text)
+   214	    if names:
+   215	        listed = ", ".join(names)
+   216	        if mentioned:
+   217	            reply = (
+   218	                "I will not guess a plan called %s; it is not on the company. "
+   219	                "The plans I have are: %s. "
+   220	                "Tell me which of those to change and the new price."
+   221	            ) % (mentioned, listed)
+   222	        else:
+   223	            reply = (
+   224	                "I will not guess a plan that is not on the company. "
+   225	                "The plans I have are: %s. "
+   226	                "Tell me which of those to change and the new price."
+   227	            ) % listed
+   228	    else:
+   229	        reply = (
+   230	            "I will not guess a plan that is not on the company. "
+   231	            "Add a plan on the company card first, then tell me the price change."
+   232	        )
+   233	    return Rejection("unknown_plan", reply)
+   234	
+   235	
+   236	def _effective_date(text, today):
+   237	    today_date = _as_date(today)
+   238	    weekday = _NEXT_WEEKDAY.search(text)
+   239	    if weekday:
+   240	        return _next_weekday(today_date, weekday.group(1))
+   241	    iso = _ISO_DATE.search(text)
+   242	    if iso:
+   243	        return date.fromisoformat(iso.group(1))
+   244	    month_day = _MONTH_DAY.search(text)
+   245	    if month_day:
+   246	        month = _MONTHS[month_day.group(1).lower()]
+   247	        day = int(month_day.group(2))
+   248	        year = int(month_day.group(3)) if month_day.group(3) else today_date.year
+   249	        try:
+   250	            resolved = date(year, month, day)
+   251	        except ValueError:
+   252	            return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
+   253	        if month_day.group(3) is None and resolved < today_date:
+   254	            try:
+   255	                resolved = date(year + 1, month, day)
+   256	            except ValueError:
+   257	                return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
+   258	        return resolved
+   259	    return today_date + timedelta(days=DEFAULT_EFFECTIVE_DAYS)
+   260	
+   261	
+   262	def _next_weekday(today_date, name):
+   263	    target = _WEEKDAYS[name.lower()]
+   264	    ahead = (target - today_date.weekday()) % 7
+   265	    if ahead == 0:
+   266	        ahead = 7
+   267	    return today_date + timedelta(days=ahead)
+   268	
+   269	
+   270	def _as_date(value):
+   271	    if value is None:
+   272	        return date.today()
+   273	    if isinstance(value, datetime):
+   274	        return value.date()
+   275	    if isinstance(value, date):
+   276	        return value
+   277	    if isinstance(value, str):
+   278	        return date.fromisoformat(value[:10])
+   279	    raise TypeError("today must be a date")
+   280	
+   281	
+   282	def _as_number(value):
+   283	    number = float(value)
+   284	    if number == int(number):
+   285	        return int(number)
+   286	    return number
+     1	"""Draft a company summary from a public site scraped through the tool router."""
+     2	
+     3	import copy
+     4	import hashlib
+     5	import html
+     6	import json
+     7	import re
+     8	from datetime import datetime, timezone
+     9	from pathlib import Path
+    10	
+    11	from gather.client import MirrorScrapeClient
+    12	from gather.extract import extract_facts, extract_price
+    13	from orchestrator.tool_router import ToolRouter
+    14	from orchestrator.trace import emit
+    15	
+    16	_REPO_ROOT = Path(__file__).resolve().parent.parent
+    17	_FIXTURE_PATH = _REPO_ROOT / "contracts" / "fixtures" / "company.json"
+    18	_DEFAULT_MIRRORS = _REPO_ROOT / "mirrors"
+    19	_ACME_MIRROR = "acme-stay.html"
+    20	
+    21	ACME_SITE_URL = "https://acme-stay.example/"
+    22	ACME_SITE_URLS = frozenset(
+    23	    {
+    24	        "https://acme-stay.example",
+    25	        "https://acme-stay.example/",
+    26	        "https://acme-stay.example/pricing",
+    27	    }
+    28	)
+    29	
+    30	# B2B with switching costs from the Scoring section; mid is the midpoint.
+    31	DEFAULT_ELASTICITY = {"low": -0.9, "mid": -0.8, "high": -0.7}
+    32	DEFAULT_CROSS_ELASTICITY = 0.4
+    33	
+    34	_PLAN_TAG = re.compile(
+    35	    r"(?is)<([a-z][a-z0-9]*)\b([^>]*\bdata-plan\s*=\s*['\"][^'\"]+['\"][^>]*)>"
+    36	    r"(.*?)</\1\s*>"
+    37	)
+    38	_SEGMENT_TAG = re.compile(
+    39	    r"(?is)<[a-z][a-z0-9]*\b([^>]*\bdata-segment\s*=\s*['\"][^'\"]+['\"][^>]*)>"
+    40	)
+    41	_ATTR = re.compile(r"""([:\w-]+)\s*=\s*(['"])(.*?)\2""")
+    42	_H1 = re.compile(r"(?is)<h1\b[^>]*>(.*?)</h1>")
+    43	_TITLE = re.compile(r"(?is)<title\b[^>]*>(.*?)</title>")
+    44	_TAGS = re.compile(r"<[^>]+>")
+    45	_DOLLAR = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
+    46	
+    47	
+    48	class AcmeMirrorClient:
+    49	    """Serve the committed Acme Stay mirror, then defer to MirrorScrapeClient.
+    50	
+    51	    Unknown non-Acme URLs still raise through the inner gather client.
+    52	    Never touches the network.
+    53	    """
+    54	
+    55	    def __init__(self, mirrors_dir=None, inner=None):
+    56	        self.mirrors_dir = (
+    57	            Path(mirrors_dir) if mirrors_dir is not None else _DEFAULT_MIRRORS
+    58	        )
+    59	        self.inner = inner if inner is not None else MirrorScrapeClient(
+    60	            mirrors_dir=self.mirrors_dir
+    61	        )
+    62	
+    63	    def scrape_as_markdown(self, url):
+    64	        if url in ACME_SITE_URLS:
+    65	            path = self.mirrors_dir / _ACME_MIRROR
+    66	            if not path.is_file():
+    67	                raise ValueError("unknown url: %s" % url)
+    68	            return path.read_text(encoding="utf-8")
+    69	        return self.inner.scrape_as_markdown(url)
+    70	
+    71	    def search_engine(self, query):
+    72	        return self.inner.search_engine(query)
+    73	
+    74	
+    75	def draft_company(url, client, router, session):
+    76	    """Scrape the company site through the router and return a company dict.
+    77	
+    78	    Plans and prices come from structured extraction of the page. The three
+    79	    known competitors are attached from the frozen company fixture. Missing
+    80	    elasticity is filled with the labeled B2B default range.
+    81	    """
+    82	    if not isinstance(router, ToolRouter):
+    83	        raise TypeError(
+    84	            "draft_company requires a ToolRouter; the company site is never fetched around it"
+    85	        )
+    86	
+    87	    def scrape_as_markdown(url):
+    88	        return client.scrape_as_markdown(url)
+    89	
+    90	    router.register("brightdata.scrape_as_markdown", scrape_as_markdown)
+    91	
+    92	    emit(
+    93	        session,
+    94	        "orchestrator",
+    95	        "doing",
+    96	        "checking the company website",
+    97	        tool="brightdata.scrape_as_markdown",
+    98	        detail={"url": url},
+    99	    )
+   100	    content = router.call("brightdata.scrape_as_markdown", url=url)
+   101	    if not isinstance(content, str):
+   102	        content = "" if content is None else str(content)
+   103	
+   104	    if session.get("snapshots") is None:
+   105	        session["snapshots"] = []
+   106	    session["snapshots"].append(
+   107	        {
+   108	            "url": url,
+   109	            "digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+   110	            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+   111	        }
+   112	    )
+   113	
+   114	    facts = extract_facts(content)
+   115	    page_price = extract_price(content)
+   116	    name = _extract_name(content) or "Company"
+   117	    plans = _extract_plans(content, page_price)
+   118	    segments = _extract_segments(content)
+   119	    used_default_elasticity = False
+   120	    for plan in plans:
+   121	        plan["segments"] = [
+   122	            _with_elasticity_defaults(copy.deepcopy(segment))
+   123	            for segment in segments
+   124	        ]
+   125	        if any(item.get("assumed") for item in plan["segments"]):
+   126	            used_default_elasticity = True
+   127	
+   128	    competitors = _known_competitors()
+   129	    company = {"name": name, "plans": plans, "competitors": competitors}
+   130	
+   131	    emit(
+   132	        session,
+   133	        "orchestrator",
+   134	        "did",
+   135	        "read the company website",
+   136	        tool="brightdata.scrape_as_markdown",
+   137	        detail={
+   138	            "url": url,
+   139	            "price": facts.get("price") if facts.get("price") is not None else page_price,
+   140	        },
+   141	    )
+   142	    emit(
+   143	        session,
+   144	        "orchestrator",
+   145	        "did",
+   146	        _plans_sentence(plans),
+   147	        detail={"plans": [{"id": item["id"], "price": item["price"]} for item in plans]},
+   148	    )
+   149	    if used_default_elasticity:
+   150	        emit(
+   151	            session,
+   152	            "orchestrator",
+   153	            "did",
+   154	            "filled in a typical price-sensitivity range because none was listed, and marked it assumed, not measured",
+   155	            detail={"elasticity": copy.deepcopy(DEFAULT_ELASTICITY), "assumed": True},
+   156	        )
+   157	    emit(
+   158	        session,
+   159	        "orchestrator",
+   160	        "did",
+   161	        "added the three known competitors with their listed prices",
+   162	        detail={"competitors": copy.deepcopy(competitors)},
+   163	    )
+   164	
+   165	    session["company"] = company
+   166	    return company
+   167	
+   168	
+   169	def _known_competitors():
+   170	    with _FIXTURE_PATH.open(encoding="utf-8") as handle:
+   171	        fixture = json.load(handle)
+   172	    return copy.deepcopy(fixture["competitors"])
+   173	
+   174	
+   175	def _extract_name(content):
+   176	    match = _H1.search(content)
+   177	    if match:
+   178	        name = _plain(match.group(1))
+   179	        if name:
+   180	            return name
+   181	    match = _TITLE.search(content)
+   182	    if match:
+   183	        name = _plain(match.group(1))
+   184	        if name:
+   185	            return name.split(" - ")[0].strip()
+   186	    return None
+   187	
+   188	
+   189	def _extract_plans(content, fallback_price):
+   190	    plans = []
+   191	    seen = set()
+   192	    for match in _PLAN_TAG.finditer(content):
+   193	        attrs = _attrs(match.group(2))
+   194	        plan_id = (attrs.get("data-plan") or "").strip()
+   195	        if not plan_id or plan_id.lower() in seen:
+   196	            continue
+   197	        body = match.group(3)
+   198	        dollar = _DOLLAR.search(body)
+   199	        if dollar:
+   200	            price = _as_number(dollar.group(1))
+   201	        elif fallback_price is not None:
+   202	            price = _as_number(fallback_price)
+   203	        else:
+   204	            continue
+   205	        plans.append({"id": plan_id, "price": price, "segments": []})
+   206	        seen.add(plan_id.lower())
+   207	    if not plans and fallback_price is not None:
+   208	        raise ValueError(
+   209	            "the page has a price but no plan name I can use; I will not guess a plan"
+   210	        )
+   211	    if not plans:
+   212	        raise ValueError("I could not find a plan and price on that page")
+   213	    return plans
+   214	
+   215	
+   216	def _extract_segments(content):
+   217	    segments = []
+   218	    seen = set()
+   219	    for match in _SEGMENT_TAG.finditer(content):
+   220	        attrs = _attrs(match.group(1))
+   221	        segment_id = (attrs.get("data-segment") or "").strip()
+   222	        if not segment_id or segment_id.lower() in seen:
+   223	            continue
+   224	        customers = _optional_number(attrs.get("data-customers"), 0)
+   225	        churn = _optional_number(attrs.get("data-monthly-churn"), 0)
+   226	        segments.append(
+   227	            {
+   228	                "id": segment_id,
+   229	                "customers": customers,
+   230	                "monthly_churn": churn,
+   231	            }
+   232	        )
+   233	        seen.add(segment_id.lower())
+   234	    if not segments:
+   235	        segments.append({"id": "customers", "customers": 0, "monthly_churn": 0})
+   236	    return segments
+   237	
+   238	
+   239	def _with_elasticity_defaults(segment):
+   240	    if not _has_elasticity(segment.get("elasticity")):
+   241	        segment["elasticity"] = copy.deepcopy(DEFAULT_ELASTICITY)
+   242	        segment["assumed"] = True
+   243	    if "cross_elasticity" not in segment:
+   244	        segment["cross_elasticity"] = DEFAULT_CROSS_ELASTICITY
+   245	    return segment
+   246	
+   247	
+   248	def _has_elasticity(value):
+   249	    if not isinstance(value, dict):
+   250	        return False
+   251	    return all(key in value for key in ("low", "mid", "high"))
+   252	
+   253	
+   254	def _plans_sentence(plans):
+   255	    if not plans:
+   256	        return "did not find a plan on the company website"
+   257	    parts = []
+   258	    for plan in plans:
+   259	        price = plan["price"]
+   260	        shown = str(int(price)) if price == int(price) else str(price)
+   261	        parts.append("the %s plan at $%s" % (plan["id"], shown))
+   262	    if len(parts) == 1:
+   263	        return "found %s" % parts[0]
+   264	    return "found %s" % ", ".join(parts)
+   265	
+   266	
+   267	def _attrs(blob):
+   268	    found = {}
+   269	    for match in _ATTR.finditer(blob or ""):
+   270	        found[match.group(1).lower()] = html.unescape(match.group(3))
+   271	    return found
+   272	
+   273	
+   274	def _plain(text):
+   275	    stripped = _TAGS.sub(" ", text or "")
+   276	    stripped = html.unescape(stripped)
+   277	    return re.sub(r"\s+", " ", stripped).strip()
+   278	
+   279	
+   280	def _optional_number(raw, default):
+   281	    if raw is None or str(raw).strip() == "":
+   282	        return default
+   283	    try:
+   284	        return _as_number(raw)
+   285	    except (TypeError, ValueError):
+   286	        return default
+   287	
+   288	
+   289	def _as_number(value):
+   290	    number = float(value)
+   291	    if number != number:
+   292	        raise ValueError("not a number")
+   293	    if number == int(number):
+   294	        return int(number)
+   295	    return number
+     1	"""Merge a segment CSV into a drafted company summary."""
+     2	
+     3	import csv
+     4	import io
+     5	import re
+     6	
+     7	REQUIRED_COLUMNS = ("segment", "customers", "monthly_churn")
+     8	
+     9	
+    10	class CsvMergeError(ValueError):
+    11	    """Raised when a CSV row cannot be applied. The message lists every problem."""
+    12	
+    13	
+    14	def merge_csv(company, csv_text):
+    15	    """Update matching segments in place and return unmatched rows.
+    16	
+    17	    Matching is by segment id (case-insensitive) across every plan.
+    18	    Unmatched rows are returned for the user to assign or discard.
+    19	    Malformed rows abort the merge with CsvMergeError; company is unchanged.
+    20	    """
+    21	    if not isinstance(company, dict):
+    22	        raise TypeError("company must be an object")
+    23	    if not isinstance(csv_text, str):
+    24	        raise TypeError("csv_text must be a string")
+    25	
+    26	    rows, problems = _parse_rows(csv_text)
+    27	    if problems:
+    28	        raise CsvMergeError(_loud_problems(problems))
+    29	
+    30	    index = _segment_index(company)
+    31	    unmatched = []
+    32	    updates = []
+    33	    for row in rows:
+    34	        key = row["segment"].lower()
+    35	        targets = index.get(key)
+    36	        if not targets:
+    37	            unmatched.append(
+    38	                {
+    39	                    "segment": row["segment"],
+    40	                    "customers": row["customers"],
+    41	                    "monthly_churn": row["monthly_churn"],
+    42	                }
+    43	            )
+    44	            continue
+    45	        updates.append((targets, row))
+    46	
+    47	    for targets, row in updates:
+    48	        for segment in targets:
+    49	            segment["customers"] = row["customers"]
+    50	            segment["monthly_churn"] = row["monthly_churn"]
+    51	    return unmatched
+    52	
+    53	
+    54	def _parse_rows(csv_text):
+    55	    problems = []
+    56	    if not csv_text.strip():
+    57	        problems.append("the CSV is empty")
+    58	        return [], problems
+    59	
+    60	    handle = io.StringIO(csv_text)
+    61	    try:
+    62	        reader = csv.DictReader(handle)
+    63	    except csv.Error as exc:
+    64	        problems.append("the CSV could not be read: %s" % exc)
+    65	        return [], problems
+    66	
+    67	    if not reader.fieldnames:
+    68	        problems.append("the CSV has no header row")
+    69	        return [], problems
+    70	
+    71	    header_map = {}
+    72	    for name in reader.fieldnames:
+    73	        if name is None:
+    74	            continue
+    75	        key = _norm_header(name)
+    76	        if key:
+    77	            header_map[key] = name
+    78	    missing = [column for column in REQUIRED_COLUMNS if column not in header_map]
+    79	    if missing:
+    80	        problems.append(
+    81	            "CSV must have columns segment, customers, monthly_churn (missing: %s)"
+    82	            % ", ".join(missing)
+    83	        )
+    84	        return [], problems
+    85	
+    86	    rows = []
+    87	    for line_number, raw in enumerate(reader, start=2):
+    88	        if raw is None:
+    89	            problems.append("line %s is malformed" % line_number)
+    90	            continue
+    91	        if _row_blank(raw):
+    92	            continue
+    93	        if None in raw:
+    94	            problems.append(
+    95	                "line %s has more fields than the header"
+    96	                % line_number
+    97	            )
+    98	            continue
+    99	        segment = raw.get(header_map["segment"])
+   100	        customers_raw = raw.get(header_map["customers"])
+   101	        churn_raw = raw.get(header_map["monthly_churn"])
+   102	        segment_id = (segment or "").strip()
+   103	        if not segment_id:
+   104	            problems.append("line %s is missing a segment id" % line_number)
+   105	            continue
+   106	        customers, customers_error = _parse_customers(customers_raw)
+   107	        if customers_error:
+   108	            problems.append("line %s: %s" % (line_number, customers_error))
+   109	            continue
+   110	        churn, churn_error = _parse_churn(churn_raw)
+   111	        if churn_error:
+   112	            problems.append("line %s: %s" % (line_number, churn_error))
+   113	            continue
+   114	        rows.append(
+   115	            {
+   116	                "segment": segment_id,
+   117	                "customers": customers,
+   118	                "monthly_churn": churn,
+   119	            }
+   120	        )
+   121	    return rows, problems
+   122	
+   123	
+   124	def _loud_problems(problems):
+   125	    if len(problems) == 1:
+   126	        return "CSV rejected: %s" % problems[0]
+   127	    numbered = "; ".join(problems)
+   128	    return "CSV rejected (%s problems): %s" % (len(problems), numbered)
+   129	
+   130	
+   131	def _norm_header(name):
+   132	    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+   133	
+   134	
+   135	def _row_blank(raw):
+   136	    values = [value for value in raw.values() if value is not None]
+   137	    return not any(str(value).strip() for value in values)
+   138	
+   139	
+   140	def _parse_customers(raw):
+   141	    if raw is None or str(raw).strip() == "":
+   142	        return None, "customers is missing"
+   143	    text = str(raw).strip().replace(",", "")
+   144	    try:
+   145	        number = float(text)
+   146	    except ValueError:
+   147	        return None, "customers %r is not a number" % raw
+   148	    if number != number or number < 0:
+   149	        return None, "customers %r is not a valid count" % raw
+   150	    if number == int(number):
+   151	        return int(number), None
+   152	    return number, None
+   153	
+   154	
+   155	def _parse_churn(raw):
+   156	    if raw is None or str(raw).strip() == "":
+   157	        return None, "monthly_churn is missing"
+   158	    text = str(raw).strip()
+   159	    try:
+   160	        number = float(text)
+   161	    except ValueError:
+   162	        return None, "monthly_churn %r is not a number" % raw
+   163	    if number != number or number < 0 or number > 1:
+   164	        return None, "monthly_churn %r must be a fraction between 0 and 1" % raw
+   165	    return number, None
+   166	
+   167	
+   168	def _segment_index(company):
+   169	    index = {}
+   170	    for plan in company.get("plans") or []:
+   171	        for segment in plan.get("segments") or []:
+   172	            key = str(segment.get("id", "")).strip().lower()
+   173	            if not key:
+   174	                continue
+   175	            index.setdefault(key, []).append(segment)
+   176	    return index
+     1	"""Stdlib tests for slice S5 company bootstrap and move parsing."""
+     2	
+     3	import copy
+     4	import json
+     5	import tempfile
+     6	import unittest
+     7	from datetime import date
+     8	from pathlib import Path
+     9	
+    10	from bootstrap import (
+    11	    ACME_SITE_URL,
+    12	    DEFAULT_ELASTICITY,
+    13	    AcmeMirrorClient,
+    14	    CsvMergeError,
+    15	    Rejection,
+    16	    draft_company,
+    17	    merge_csv,
+    18	    parse_move,
+    19	)
+    20	from contracts.test_contracts import load as load_contract
+    21	from contracts.test_contracts import validate
+    22	from orchestrator import SessionStore, ToolRouter, new_session
+    23	
+    24	ROOT = Path(__file__).resolve().parent
+    25	COMPANY_FIXTURE = ROOT / "contracts" / "fixtures" / "company.json"
+    26	MOVE_FIXTURE = ROOT / "contracts" / "fixtures" / "move.json"
+    27	ACME_MIRROR = ROOT / "mirrors" / "acme-stay.html"
+    28	DEMO_SENTENCE = "Raise Pro from $49 to $59"
+    29	DEMO_SENTENCE_WITH_DATE = (
+    30	    "Raise Pro from $49 to $59 and email customers next Monday"
+    31	)
+    32	
+    33	
+    34	def load_company():
+    35	    with COMPANY_FIXTURE.open(encoding="utf-8") as handle:
+    36	        return json.load(handle)
+    37	
+    38	
+    39	def load_move():
+    40	    with MOVE_FIXTURE.open(encoding="utf-8") as handle:
+    41	        return json.load(handle)
+    42	
+    43	
+    44	class TestParseMove(unittest.TestCase):
+    45	    def test_demo_sentence_matches_move_fixture(self):
+    46	        move = parse_move(
+    47	            DEMO_SENTENCE,
+    48	            load_company(),
+    49	            today=date(2026, 8, 29),
+    50	        )
+    51	        self.assertEqual(move, load_move())
+    52	        self.assertEqual(move["plan"], "pro")
+    53	        self.assertEqual(move["from"], 49)
+    54	        self.assertEqual(move["to"], 59)
+    55	        self.assertEqual(move["action"], "open_pr")
+    56	        self.assertEqual(move["effective"], "2026-09-07")
+    57	
+    58	    def test_demo_sentence_with_next_monday_from_fixed_today(self):
+    59	        move = parse_move(
+    60	            DEMO_SENTENCE_WITH_DATE,
+    61	            load_company(),
+    62	            today=date(2026, 9, 1),
+    63	        )
+    64	        self.assertEqual(move["plan"], "pro")
+    65	        self.assertEqual(move["from"], 49)
+    66	        self.assertEqual(move["to"], 59)
+    67	        self.assertEqual(move["action"], "open_pr")
+    68	        self.assertEqual(move["effective"], "2026-09-07")
+    69	
+    70	    def test_next_monday_from_a_saturday_is_two_days_later(self):
+    71	        move = parse_move(
+    72	            DEMO_SENTENCE_WITH_DATE,
+    73	            load_company(),
+    74	            today=date(2026, 8, 29),
+    75	        )
+    76	        self.assertEqual(move["effective"], "2026-08-31")
+    77	
+    78	    def test_next_monday_from_a_monday_is_the_following_week(self):
+    79	        move = parse_move(
+    80	            DEMO_SENTENCE_WITH_DATE,
+    81	            load_company(),
+    82	            today=date(2026, 8, 31),
+    83	        )
+    84	        self.assertEqual(move["effective"], "2026-09-07")
+    85	
+    86	    def test_default_effective_is_today_plus_nine_days(self):
+    87	        move = parse_move(
+    88	            DEMO_SENTENCE,
+    89	            load_company(),
+    90	            today=date(2026, 8, 20),
+    91	        )
+    92	        self.assertEqual(move["effective"], "2026-08-29")
+    93	
+    94	    def test_question_is_rejected_and_does_not_touch_a_tree(self):
+    95	        company = load_company()
+    96	        tree = {"nodes": [{"id": "root", "children": ["a"]}]}
+    97	        snapshot_company = copy.deepcopy(company)
+    98	        snapshot_tree = copy.deepcopy(tree)
+    99	        result = parse_move("Should I raise prices?", company)
+   100	        self.assertIsInstance(result, Rejection)
+   101	        self.assertEqual(result.kind, "question")
+   102	        self.assertIn("specific", result.reply.lower())
+   103	        self.assertNotIn("tree", result.reply.lower())
+   104	        self.assertEqual(company, snapshot_company)
+   105	        self.assertEqual(tree, snapshot_tree)
+   106	
+   107	    def test_out_of_scope_is_rejected_and_does_not_touch_a_tree(self):
+   108	        company = load_company()
+   109	        tree = {"nodes": [{"id": "root"}]}
+   110	        snapshot_company = copy.deepcopy(company)
+   111	        snapshot_tree = copy.deepcopy(tree)
+   112	        result = parse_move("Launch a new onboarding flow", company)
+   113	        self.assertIsInstance(result, Rejection)
+   114	        self.assertEqual(result.kind, "out_of_scope")
+   115	        self.assertIn("price", result.reply.lower())
+   116	        self.assertEqual(company, snapshot_company)
+   117	        self.assertEqual(tree, snapshot_tree)
+   118	
+   119	    def test_unknown_plan_is_not_guessed(self):
+   120	        result = parse_move(
+   121	            "Raise Enterprise from $99 to $129",
+   122	            load_company(),
+   123	            today=date(2026, 8, 29),
+   124	        )
+   125	        self.assertIsInstance(result, Rejection)
+   126	        self.assertEqual(result.kind, "unknown_plan")
+   127	        self.assertIn("not on the company", result.reply.lower())
+   128	        self.assertNotIn("enterprise", [plan["id"] for plan in load_company()["plans"]])
+   129	
+   130	
+   131	class TestDraftCompany(unittest.TestCase):
+   132	    def test_draft_validates_against_company_schema(self):
+   133	        session = new_session()
+   134	        router = ToolRouter(session)
+   135	        company = draft_company(
+   136	            ACME_SITE_URL,
+   137	            AcmeMirrorClient(),
+   138	            router,
+   139	            session,
+   140	        )
+   141	        schema = load_contract("company.schema.json")
+   142	        self.assertEqual(validate(company, schema), [])
+   143	        self.assertEqual(company["name"], "Acme Stay")
+   144	        self.assertEqual(len(company["plans"]), 1)
+   145	        self.assertEqual(company["plans"][0]["id"], "pro")
+   146	        self.assertEqual(company["plans"][0]["price"], 49)
+   147	        self.assertEqual(
+   148	            [item["id"] for item in company["plans"][0]["segments"]],
+   149	            ["smb", "mid"],
+   150	        )
+   151	        self.assertEqual(
+   152	            [item["name"] for item in company["competitors"]],
+   153	            ["Rival A", "Rival B", "Rival C"],
+   154	        )
+   155	        self.assertEqual(
+   156	            [item["price"] for item in company["competitors"]],
+   157	            [45, 52, 47],
+   158	        )
+   159	
+   160	    def test_missing_elasticity_gets_labeled_b2b_default(self):
+   161	        session = new_session()
+   162	        company = draft_company(
+   163	            ACME_SITE_URL,
+   164	            AcmeMirrorClient(),
+   165	            ToolRouter(session),
+   166	            session,
+   167	        )
+   168	        for segment in company["plans"][0]["segments"]:
+   169	            self.assertEqual(segment["elasticity"], DEFAULT_ELASTICITY)
+   170	            self.assertIs(segment["assumed"], True)
+   171	            self.assertEqual(segment["cross_elasticity"], 0.4)
+   172	        html = ACME_MIRROR.read_text(encoding="utf-8")
+   173	        self.assertNotIn("elasticity", html.lower())
+   174	        self.assertNotIn("-0.9", html)
+   175	
+   176	    def test_scrape_goes_through_the_router_and_is_traced_in_plain_language(self):
+   177	        events = []
+   178	        original = ToolRouter.call
+   179	
+   180	        def tracking_call(self, name, **kwargs):
+   181	            events.append(("router", name, kwargs.get("url")))
+   182	            return original(self, name, **kwargs)
+   183	
+   184	        ToolRouter.call = tracking_call
+   185	        try:
+   186	            session = new_session()
+   187	            draft_company(
+   188	                ACME_SITE_URL,
+   189	                AcmeMirrorClient(),
+   190	                ToolRouter(session),
+   191	                session,
+   192	            )
+   193	        finally:
+   194	            ToolRouter.call = original
+   195	
+   196	        scrapes = [
+   197	            event
+   198	            for event in events
+   199	            if event[0] == "router" and event[1] == "brightdata.scrape_as_markdown"
+   200	        ]
+   201	        self.assertEqual(len(scrapes), 1)
+   202	        self.assertEqual(scrapes[0][2], ACME_SITE_URL)
+   203	
+   204	        texts = " ".join(event["text"].lower() for event in session["trace"])
+   205	        self.assertIn("company website", texts)
+   206	        self.assertIn("pro", texts)
+   207	        self.assertIn("assumed, not measured", texts)
+   208	        self.assertIn("competitors", texts)
+   209	        self.assertNotIn("elasticity", texts)
+   210	        self.assertNotIn("yaml", texts)
+   211	
+   212	        with self.assertRaises(TypeError):
+   213	            draft_company(ACME_SITE_URL, AcmeMirrorClient(), object(), new_session())
+   214	
+   215	    def test_corrected_value_survives_session_store_round_trip(self):
+   216	        with tempfile.TemporaryDirectory() as tmp:
+   217	            session = new_session()
+   218	            company = draft_company(
+   219	                ACME_SITE_URL,
+   220	                AcmeMirrorClient(),
+   221	                ToolRouter(session),
+   222	                session,
+   223	            )
+   224	            company["plans"][0]["price"] = 51
+   225	            session["company"] = company
+   226	            store = SessionStore(tmp)
+   227	            store.save(session)
+   228	            loaded = store.load()
+   229	            self.assertEqual(loaded["company"]["plans"][0]["price"], 51)
+   230	            self.assertNotEqual(loaded["company"]["plans"][0]["price"], 49)
+   231	            self.assertEqual(loaded["company"]["name"], "Acme Stay")
+   232	
+   233	
+   234	class TestMergeCsv(unittest.TestCase):
+   235	    def test_matching_rows_update_in_place_and_unmatched_are_surfaced(self):
+   236	        company = load_company()
+   237	        smb = company["plans"][0]["segments"][0]
+   238	        self.assertEqual(smb["id"], "smb")
+   239	        self.assertEqual(smb["customers"], 300)
+   240	        csv_text = (
+   241	            "segment,customers,monthly_churn\n"
+   242	            "smb,310,0.05\n"
+   243	            "enterprise,10,0.01\n"
+   244	        )
+   245	        unmatched = merge_csv(company, csv_text)
+   246	        self.assertIs(company["plans"][0]["segments"][0], smb)
+   247	        self.assertEqual(smb["customers"], 310)
+   248	        self.assertEqual(smb["monthly_churn"], 0.05)
+   249	        self.assertEqual(company["plans"][0]["segments"][1]["customers"], 120)
+   250	        self.assertEqual(
+   251	            unmatched,
+   252	            [{"segment": "enterprise", "customers": 10, "monthly_churn": 0.01}],
+   253	        )
+   254	
+   255	    def test_malformed_rows_are_rejected_loudly_and_company_is_unchanged(self):
+   256	        company = load_company()
+   257	        snapshot = copy.deepcopy(company)
+   258	        csv_text = (
+   259	            "segment,customers,monthly_churn\n"
+   260	            "smb,many,0.04\n"
+   261	        )
+   262	        with self.assertRaises(CsvMergeError) as ctx:
+   263	            merge_csv(company, csv_text)
+   264	        message = str(ctx.exception).lower()
+   265	        self.assertIn("rejected", message)
+   266	        self.assertIn("customers", message)
+   267	        self.assertEqual(company, snapshot)
+   268	
+   269	    def test_missing_columns_are_rejected(self):
+   270	        company = load_company()
+   271	        with self.assertRaises(CsvMergeError) as ctx:
+   272	            merge_csv(company, "segment,customers\nsmb,300\n")
+   273	        self.assertIn("monthly_churn", str(ctx.exception))
+   274	
+   275	    def test_case_insensitive_segment_match(self):
+   276	        company = load_company()
+   277	        unmatched = merge_csv(
+   278	            company,
+   279	            "segment,customers,monthly_churn\nSMB,301,0.03\n",
+   280	        )
+   281	        self.assertEqual(unmatched, [])
+   282	        self.assertEqual(company["plans"][0]["segments"][0]["customers"], 301)
+   283	
+   284	
+   285	if __name__ == "__main__":
+   286	    unittest.main()
+
+exec
+/bin/zsh -lc 'python3 -c $'"'import json\\nfrom datetime import date\\nfrom pathlib import Path\\nfrom bootstrap import parse_move, merge_csv\\ncompany=json.loads(Path(\"contracts/fixtures/company.json\").read_text())\\ninputs=[\"\", \"Raise Pro from "'$49 to $59 and email customers next Monday", "Should I raise prices?", "Launch a new onboarding flow", "Raise Enterprise from $99 to $129", "Raise Pro from $59 to $49", "Lower Pro from $49 to $59", "Raise Pro from $49 to $59 on 2026-99-99", "Raise Pro from $49 to $0"]'"\\nfor s in inputs:\\n try: out=parse_move(s,company,today=date(2026,8,29))\\n except Exception as e: out=f\"{type(e).__name__}: {e}\"\\n print(repr(s),\"=>\",repr(out))\\nfor csv_text in [\"segment,customers,monthly_churn\\\\nsmb,300,1.01\\\\n\", \"segment,customers,monthly_churn\\\\nsmb,inf,0.04\\\\n\", \"segment,customers,monthly_churn\\\\n\\\\\\\"smb,300,0.04\\\\n\", \"segment,customers,monthly_churn\\\\nsmb,300,0.04,extra\\\\n\"]:\\n c=json.loads(Path(\"contracts/fixtures/company.json\").read_text())\\n try: out=merge_csv(c,csv_text)\\n except Exception as e: out=f\"{type(e).__name__}: {e}\"\\n print(\"CSV\",repr(csv_text),\"=>\",repr(out))'" in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+'' => Rejection(kind='question', reply='Tell me a specific price change, like: Raise Pro from $49 to $59.')
+'Raise Pro from $49 to $59 and email customers next Monday' => {'plan': 'pro', 'from': 49, 'to': 59, 'action': 'open_pr', 'effective': '2026-08-31'}
+'Should I raise prices?' => Rejection(kind='question', reply='Tell me a specific price change, like: Raise Pro from $49 to $59.')
+'Launch a new onboarding flow' => Rejection(kind='out_of_scope', reply='Only price moves on one plan are supported today. Describe a price change, like: Raise Pro from $49 to $59.')
+'Raise Enterprise from $99 to $129' => Rejection(kind='unknown_plan', reply='I will not guess a plan called Enterprise; it is not on the company. The plans I have are: pro. Tell me which of those to change and the new price.')
+'Raise Pro from $59 to $49' => {'plan': 'pro', 'from': 59, 'to': 49, 'action': 'open_pr', 'effective': '2026-09-07'}
+'Lower Pro from $49 to $59' => {'plan': 'pro', 'from': 49, 'to': 59, 'action': 'open_pr', 'effective': '2026-09-07'}
+'Raise Pro from $49 to $59 on 2026-99-99' => 'ValueError: month must be in 1..12, not 99'
+'Raise Pro from $49 to $0' => {'plan': 'pro', 'from': 49, 'to': 0, 'action': 'open_pr', 'effective': '2026-09-07'}
+CSV 'segment,customers,monthly_churn\nsmb,300,1.01\n' => "CsvMergeError: CSV rejected: line 2: monthly_churn '1.01' must be a fraction between 0 and 1"
+CSV 'segment,customers,monthly_churn\nsmb,inf,0.04\n' => 'OverflowError: cannot convert float infinity to integer'
+CSV 'segment,customers,monthly_churn\n"smb,300,0.04\n' => 'CsvMergeError: CSV rejected: line 2: customers is missing'
+CSV 'segment,customers,monthly_churn\nsmb,300,0.04,extra\n' => 'CsvMergeError: CSV rejected: line 2 has more fields than the header'
+
+exec
+/bin/zsh -lc "nl -ba orchestrator/tool_router.py && nl -ba contracts/test_contracts.py && git diff --check main...HEAD && git status --short && rg -n \"draft_company\\(|merge_csv\\(|parse_move\\(\" --glob '*.py' --glob '"'!test_bootstrap.py'"' ." in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+     1	"""Tool router: the only path to tools, with a fixed allowlist."""
+     2	
+     3	from .trace import emit
+     4	
+     5	ALLOWLIST = frozenset(
+     6	    {
+     7	        "brightdata.scrape_as_markdown",
+     8	        "brightdata.search_engine",
+     9	        "sandbox.exec",
+    10	        "github.open_pr",
+    11	    }
+    12	)
+    13	
+    14	
+    15	class ToolRefused(Exception):
+    16	    """Raised when a tool is not on the allowlist or is not registered."""
+    17	
+    18	    def __init__(self, tool_name, reason):
+    19	        self.tool_name = tool_name
+    20	        self.reason = reason
+    21	        super().__init__(reason)
+    22	
+    23	
+    24	class ToolRouter:
+    25	    """Dispatch only allowlisted, registered callables. Every other request is refused and traced."""
+    26	
+    27	    def __init__(self, session):
+    28	        self.session = session
+    29	        self._tools = {}
+    30	
+    31	    def register(self, name, fn):
+    32	        if name not in ALLOWLIST:
+    33	            self._refuse(name, "that tool is not on the allowed list")
+    34	        if not callable(fn):
+    35	            raise TypeError("tool must be callable")
+    36	        self._tools[name] = fn
+    37	
+    38	    def call(self, name, **kwargs):
+    39	        if name not in ALLOWLIST:
+    40	            self._refuse(name, "that tool is not on the allowed list")
+    41	        if name not in self._tools:
+    42	            self._refuse(name, "that tool is not registered")
+    43	        return self._tools[name](**kwargs)
+    44	
+    45	    def _refuse(self, name, reason):
+    46	        emit(
+    47	            self.session,
+    48	            "orchestrator",
+    49	            "did",
+    50	            "refused a tool that is not allowed",
+    51	            tool=name,
+    52	            detail={"reason": reason},
+    53	        )
+    54	        raise ToolRefused(name, reason)
+     1	"""Fixture-vs-schema conformance tests for the frozen contracts.
+     2	
+     3	A minimal draft-07 subset validator (type, required, properties, enum,
+     4	const, anyOf, allOf+if/then on const, items, pattern, maxItems) - enough
+     5	to fail the build on fixture/schema drift without external dependencies.
+     6	"""
+     7	
+     8	import json
+     9	import re
+    10	import unittest
+    11	from pathlib import Path
+    12	
+    13	HERE = Path(__file__).parent
+    14	
+    15	TYPES = {
+    16	    "object": dict, "array": list, "string": str,
+    17	    "boolean": bool, "null": type(None),
+    18	}
+    19	
+    20	
+    21	def _type_ok(value, expected):
+    22	    if expected == "number":
+    23	        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    24	    if expected == "integer":
+    25	        return isinstance(value, int) and not isinstance(value, bool)
+    26	    return isinstance(value, TYPES[expected])
+    27	
+    28	
+    29	def validate(value, schema, path="$"):
+    30	    errors = []
+    31	    t = schema.get("type")
+    32	    if t is not None:
+    33	        types = t if isinstance(t, list) else [t]
+    34	        if not any(_type_ok(value, item) for item in types):
+    35	            return [f"{path}: expected {types}, got {type(value).__name__}"]
+    36	    if "const" in schema and value != schema["const"]:
+    37	        errors.append(f"{path}: expected const {schema['const']!r}")
+    38	    if "enum" in schema and value not in schema["enum"]:
+    39	        errors.append(f"{path}: {value!r} not in enum")
+    40	    if "pattern" in schema and isinstance(value, str):
+    41	        if not re.search(schema["pattern"], value):
+    42	            errors.append(f"{path}: does not match {schema['pattern']}")
+    43	    if "anyOf" in schema:
+    44	        branches = [validate(value, sub, path) for sub in schema["anyOf"]]
+    45	        if not any(not b for b in branches):
+    46	            errors.append(f"{path}: no anyOf branch matched")
+    47	    for sub in schema.get("allOf", []):
+    48	        if "if" in sub:
+    49	            cond = sub["if"].get("properties", {})
+    50	            applies = isinstance(value, dict) and all(
+    51	                key in value and value[key] == spec.get("const")
+    52	                for key, spec in cond.items())
+    53	            if applies and "then" in sub:
+    54	                errors.extend(validate(value, sub["then"], path))
+    55	        else:
+    56	            errors.extend(validate(value, sub, path))
+    57	    if isinstance(value, dict):
+    58	        for key in schema.get("required", []):
+    59	            if key not in value:
+    60	                errors.append(f"{path}: missing required {key!r}")
+    61	        for key, sub in schema.get("properties", {}).items():
+    62	            if key in value:
+    63	                errors.extend(validate(value[key], sub, f"{path}.{key}"))
+    64	    if isinstance(value, list):
+    65	        if "maxItems" in schema and len(value) > schema["maxItems"]:
+    66	            errors.append(f"{path}: more than {schema['maxItems']} items")
+    67	        if "items" in schema:
+    68	            for i, item in enumerate(value):
+    69	                errors.extend(validate(item, schema["items"], f"{path}[{i}]"))
+    70	    return errors
+    71	
+    72	
+    73	def load(name):
+    74	    return json.loads((HERE / name).read_text())
+    75	
+    76	
+    77	PAIRS = [
+    78	    ("company.schema.json", "fixtures/company.json"),
+    79	    ("move.schema.json", "fixtures/move.json"),
+    80	    ("score_result.schema.json", "fixtures/score_result.json"),
+    81	    ("pending_action.schema.json", "fixtures/pending_action.json"),
+    82	    ("recommendation.schema.json", "fixtures/recommendation.json"),
+    83	]
+    84	
+    85	
+    86	class FixtureConformanceTests(unittest.TestCase):
+    87	    def test_scalar_fixtures_match_their_schemas(self):
+    88	        for schema_name, fixture_name in PAIRS:
+    89	            with self.subTest(fixture=fixture_name):
+    90	                errors = validate(load(fixture_name), load(schema_name))
+    91	                self.assertEqual(errors, [])
+    92	
+    93	    def test_every_trace_event_fixture_conforms(self):
+    94	        schema = load("trace_event.schema.json")
+    95	        for i, event in enumerate(load("fixtures/trace_events.json")):
+    96	            with self.subTest(event=i):
+    97	                self.assertEqual(validate(event, schema), [])
+    98	
+    99	    def test_every_persona_card_conforms(self):
+   100	        schema = load("persona_card.schema.json")
+   101	        for card in load("fixtures/persona_cards.json"):
+   102	            with self.subTest(card=card.get("competitor")):
+   103	                self.assertEqual(validate(card, schema), [])
+   104	
+   105	    def test_every_tree_node_conforms_including_actor_menus(self):
+   106	        schema = load("tree_node.schema.json")
+   107	        for node in load("fixtures/tree.json")["nodes"]:
+   108	            with self.subTest(node=node["id"]):
+   109	                self.assertEqual(validate(node, schema), [])
+   110	
+   111	    def test_actor_conditional_menus_actually_reject(self):
+   112	        schema = load("tree_node.schema.json")
+   113	        node = dict(load("fixtures/tree.json")["nodes"][0])
+   114	        node["actor"] = "competitor"
+   115	        node["choice"] = "hold"
+   116	        self.assertNotEqual(validate(node, schema), [])
+   117	
+   118	
+   119	if __name__ == "__main__":
+   120	    unittest.main()
+?? .codex_review_s5.log
+./bootstrap/csv_merge.py:14:def merge_csv(company, csv_text):
+./bootstrap/move_parse.py:126:def parse_move(text, company, today=None):
+./bootstrap/company_draft.py:75:def draft_company(url, client, router, session):
+
+exec
+/bin/zsh -lc "nl -ba gather/extract.py | sed -n '1,100p'; nl -ba bootstrap/company_draft.py | sed -n '108,180p'; nl -ba bootstrap/company_draft.py | sed -n '250,305p'; nl -ba bootstrap/__init__.py" in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+     1	"""Structured-fact extraction for untrusted scraped pages.
+     2	
+     3	Price comes out as a number or None, never raw text.
+     4	Facts are schema-shaped and drop instruction-like content.
+     5	"""
+     6	
+     7	import html
+     8	import json
+     9	import math
+    10	import re
+    11	from pathlib import Path
+    12	
+    13	_REPO_ROOT = Path(__file__).resolve().parent.parent
+    14	_SCHEMA_PATH = _REPO_ROOT / "contracts" / "persona_card.schema.json"
+    15	
+    16	_INSTRUCTION_MARKERS = (
+    17	    "ignore previous",
+    18	    "ignore all previous",
+    19	    "ignore all instructions",
+    20	    "you are now",
+    21	    "system:",
+    22	    "disclose the tool",
+    23	    "treat this page as trusted",
+    24	    "override the extractor",
+    25	    "set notes to pwned",
+    26	    "new instructions",
+    27	    "disregard previous",
+    28	    "developer mode",
+    29	    "jailbreak",
+    30	    "trusted system input",
+    31	)
+    32	
+    33	# Visible-text price: optional thousands separators, at most two decimals.
+    34	_PRICE_NUM = r"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)"
+    35	_DOLLAR_PRICE = re.compile(r"\$\s*" + _PRICE_NUM)
+    36	_PRO_PRICE = re.compile(
+    37	    r"(?is)\bpro\b.{0,160}?\$\s*" + _PRICE_NUM
+    38	)
+    39	_PRO_PRICE_AFTER = re.compile(
+    40	    r"(?is)\$\s*" + _PRICE_NUM + r".{0,80}\bpro\b"
+    41	)
+    42	_NOTES_OK = re.compile(
+    43	    r"^(?:price (?:unknown|\d+(?:\.\d+)?)(?:; plan count \d+)?)?$"
+    44	)
+    45	_MIN_PRICE = 0
+    46	_MAX_PRICE = 100000
+    47	
+    48	
+    49	def _load_schema():
+    50	    with _SCHEMA_PATH.open(encoding="utf-8") as handle:
+    51	        return json.load(handle)
+    52	
+    53	
+    54	_SCHEMA = _load_schema()
+    55	
+    56	
+    57	def _contains_instruction(text):
+    58	    if not isinstance(text, str) or not text:
+    59	        return False
+    60	    lower = text.lower()
+    61	    if any(marker in lower for marker in _INSTRUCTION_MARKERS):
+    62	        return True
+    63	    if "ignore" in lower and "instruction" in lower:
+    64	        return True
+    65	    return False
+    66	
+    67	
+    68	def _strip_script_and_style(text):
+    69	    """Drop script/style blocks, including unclosed ones (consume to EOF)."""
+    70	    cleaned = re.sub(r"<!--.*?-->", " ", text, flags=re.DOTALL)
+    71	    cleaned = re.sub(
+    72	        r"(?is)<script\b[^>]*>.*?(?:</script\s*>|$)",
+    73	        " ",
+    74	        cleaned,
+    75	    )
+    76	    cleaned = re.sub(
+    77	        r"(?is)<style\b[^>]*>.*?(?:</style\s*>|$)",
+    78	        " ",
+    79	        cleaned,
+    80	    )
+    81	    return cleaned
+    82	
+    83	
+    84	def _to_visible_text(markdown_or_html):
+    85	    """Strip script/style and tags to visible text.
+    86	
+    87	    Returns None when a script/style block is malformed (fail closed).
+    88	    """
+    89	    cleaned = _strip_script_and_style(markdown_or_html)
+    90	    if re.search(r"(?is)<(script|style)\b", cleaned):
+    91	        return None
+    92	    cleaned = re.sub(
+    93	        r"(?is)<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bhidden\b[^>]*>.*?(?:</(?P=tag)\s*>|$)",
+    94	        " ",
+    95	        cleaned,
+    96	    )
+    97	    plain = re.sub(r"<[^>]+>", " ", cleaned)
+    98	    plain = html.unescape(plain)
+    99	    return re.sub(r"\s+", " ", plain).strip()
+   100	
+   108	            "url": url,
+   109	            "digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+   110	            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+   111	        }
+   112	    )
+   113	
+   114	    facts = extract_facts(content)
+   115	    page_price = extract_price(content)
+   116	    name = _extract_name(content) or "Company"
+   117	    plans = _extract_plans(content, page_price)
+   118	    segments = _extract_segments(content)
+   119	    used_default_elasticity = False
+   120	    for plan in plans:
+   121	        plan["segments"] = [
+   122	            _with_elasticity_defaults(copy.deepcopy(segment))
+   123	            for segment in segments
+   124	        ]
+   125	        if any(item.get("assumed") for item in plan["segments"]):
+   126	            used_default_elasticity = True
+   127	
+   128	    competitors = _known_competitors()
+   129	    company = {"name": name, "plans": plans, "competitors": competitors}
+   130	
+   131	    emit(
+   132	        session,
+   133	        "orchestrator",
+   134	        "did",
+   135	        "read the company website",
+   136	        tool="brightdata.scrape_as_markdown",
+   137	        detail={
+   138	            "url": url,
+   139	            "price": facts.get("price") if facts.get("price") is not None else page_price,
+   140	        },
+   141	    )
+   142	    emit(
+   143	        session,
+   144	        "orchestrator",
+   145	        "did",
+   146	        _plans_sentence(plans),
+   147	        detail={"plans": [{"id": item["id"], "price": item["price"]} for item in plans]},
+   148	    )
+   149	    if used_default_elasticity:
+   150	        emit(
+   151	            session,
+   152	            "orchestrator",
+   153	            "did",
+   154	            "filled in a typical price-sensitivity range because none was listed, and marked it assumed, not measured",
+   155	            detail={"elasticity": copy.deepcopy(DEFAULT_ELASTICITY), "assumed": True},
+   156	        )
+   157	    emit(
+   158	        session,
+   159	        "orchestrator",
+   160	        "did",
+   161	        "added the three known competitors with their listed prices",
+   162	        detail={"competitors": copy.deepcopy(competitors)},
+   163	    )
+   164	
+   165	    session["company"] = company
+   166	    return company
+   167	
+   168	
+   169	def _known_competitors():
+   170	    with _FIXTURE_PATH.open(encoding="utf-8") as handle:
+   171	        fixture = json.load(handle)
+   172	    return copy.deepcopy(fixture["competitors"])
+   173	
+   174	
+   175	def _extract_name(content):
+   176	    match = _H1.search(content)
+   177	    if match:
+   178	        name = _plain(match.group(1))
+   179	        if name:
+   180	            return name
+   250	        return False
+   251	    return all(key in value for key in ("low", "mid", "high"))
+   252	
+   253	
+   254	def _plans_sentence(plans):
+   255	    if not plans:
+   256	        return "did not find a plan on the company website"
+   257	    parts = []
+   258	    for plan in plans:
+   259	        price = plan["price"]
+   260	        shown = str(int(price)) if price == int(price) else str(price)
+   261	        parts.append("the %s plan at $%s" % (plan["id"], shown))
+   262	    if len(parts) == 1:
+   263	        return "found %s" % parts[0]
+   264	    return "found %s" % ", ".join(parts)
+   265	
+   266	
+   267	def _attrs(blob):
+   268	    found = {}
+   269	    for match in _ATTR.finditer(blob or ""):
+   270	        found[match.group(1).lower()] = html.unescape(match.group(3))
+   271	    return found
+   272	
+   273	
+   274	def _plain(text):
+   275	    stripped = _TAGS.sub(" ", text or "")
+   276	    stripped = html.unescape(stripped)
+   277	    return re.sub(r"\s+", " ", stripped).strip()
+   278	
+   279	
+   280	def _optional_number(raw, default):
+   281	    if raw is None or str(raw).strip() == "":
+   282	        return default
+   283	    try:
+   284	        return _as_number(raw)
+   285	    except (TypeError, ValueError):
+   286	        return default
+   287	
+   288	
+   289	def _as_number(value):
+   290	    number = float(value)
+   291	    if number != number:
+   292	        raise ValueError("not a number")
+   293	    if number == int(number):
+   294	        return int(number)
+   295	    return number
+     1	"""Company bootstrap and move parsing.
+     2	
+     3	Public surface: parse_move, draft_company, merge_csv.
+     4	"""
+     5	
+     6	from .company_draft import (
+     7	    ACME_SITE_URL,
+     8	    DEFAULT_CROSS_ELASTICITY,
+     9	    DEFAULT_ELASTICITY,
+    10	    AcmeMirrorClient,
+    11	    draft_company,
+    12	)
+    13	from .csv_merge import CsvMergeError, merge_csv
+    14	from .move_parse import Rejection, parse_move
+    15	
+    16	__all__ = [
+    17	    "ACME_SITE_URL",
+    18	    "DEFAULT_CROSS_ELASTICITY",
+    19	    "DEFAULT_ELASTICITY",
+    20	    "AcmeMirrorClient",
+    21	    "CsvMergeError",
+    22	    "Rejection",
+    23	    "draft_company",
+    24	    "merge_csv",
+    25	    "parse_move",
+    26	]
+
+exec
+/bin/zsh -lc 'python3 -c $'"'import json\\nfrom pathlib import Path\\nfrom bootstrap import merge_csv\\nc=json.loads(Path(\"contracts/fixtures/company.json\").read_text())\\nfor s in [\"segment,customers,monthly_churn\\\\n\\\\\\\"sm\\\\\\\"b\\\\\\\",1,0.2\\\\n\", \"segment,customers,customers,monthly_churn\\\\nsmb,300,999,0.04\\\\n\"]:\\n try: print(repr(s), \"=>\", merge_csv(c,s))\\n except Exception as e: print(type(e).__name__,e)'" in /Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove
+ succeeded in 0ms:
+'segment,customers,monthly_churn\n"sm"b",1,0.2\n' => [{'segment': 'smb"', 'customers': 1, 'monthly_churn': 0.2}]
+'segment,customers,customers,monthly_churn\nsmb,300,999,0.04\n' => []
+
+codex
+FAIL
+
+## Spec findings
+
+1. **Critical — S5 is unreachable from the product.** [bootstrap/__init__.py:14](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/__init__.py:14)  
+   Repository-wide search finds `parse_move`, `draft_company`, and `merge_csv` called only by tests. Typed input, URL submission, CSV drop, editable-card corrections, and reload behavior required by [countermove.md:208](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/countermove.md:208) are not connected.  
+   **Fix:** integrate these APIs into the application handlers/UI and add connected tests.
+
+2. **High — “No tree is built” tests prove nothing.** [test_bootstrap.py:94](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/test_bootstrap.py:94)  
+   The tests create an unrelated local `tree`, never pass it to production code, then assert it remained untouched.  
+   **Fix:** exercise the real submit-to-tree path and assert the builder/store is never called for questions, non-price moves, empty input, and unknown plans.
+
+3. **High — contradictory and stale price moves become executable `open_pr` actions.** [bootstrap/move_parse.py:135](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/move_parse.py:135)  
+   Probes showed `Raise Pro from $59 to $49` and `Lower Pro from $49 to $59` are accepted. The parser also never checks that `from` matches the company’s current price. Invalid ISO dates raise uncaught `ValueError`.  
+   **Fix:** validate direction, positivity, unequal prices, current-price agreement, and dates; return a typed rejection for invalid input.
+
+4. **High — competitors bypass the routed website draft.** [bootstrap/company_draft.py:128](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:128)  
+   The routed site scrape is genuine and the resulting object passes `company.schema.json`, but competitors and prices are silently copied from the contract fixture at [company_draft.py:169](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:169). The mirror contains no competitors, while the trace claims their “listed prices” were added.  
+   **Fix:** source competitors through routed calls and trace their provenance, or explicitly surface them as assumed fixture data.
+
+5. **Medium — malformed CSV can avoid the promised loud rejection.** [bootstrap/csv_merge.py:60](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/csv_merge.py:60)  
+   Non-strict parsing turns `"sm"b",1,0.2` into an unmatched segment named `smb"` instead of rejecting it. `customers=inf` escapes as `OverflowError`, not `CsvMergeError`. Churn above 1 is correctly rejected, but untested.  
+   **Fix:** use strict CSV parsing, catch iteration-time `csv.Error` and numeric overflow, reject duplicate headers, and add malformed-quote, infinity, and churn-boundary tests.
+
+## Standards findings
+
+6. **Medium — `draft_company` has divergent responsibilities.** [bootstrap/company_draft.py:75](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:75)  
+   Router setup, fetching, snapshotting, HTML parsing, fixture injection, defaults, tracing, and session mutation are combined.  
+   **Fix:** extract a pure `parse_company_page(content)` module and retain orchestration in `draft_company`.
+
+7. **Low — price extraction is duplicated.** [bootstrap/company_draft.py:114](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:114)  
+   `extract_facts(content)` already extracts the price, immediately followed by another `extract_price(content)` call.  
+   **Fix:** use one extraction result.
+
+## Verification
+
+`python3 -m unittest test_bootstrap -v` ran 16 tests: 15 passed; the session-store test errored because the read-only review environment had no writable temporary directory. This environmental error does not affect the substantive FAIL verdict.
+
+The diff is otherwise correctly scoped to the six requested S5 files. Router use, schema conformance, `assumed=true` defaults, unmatched-row returns, and churn `> 1` rejection were confirmed.
+hook: Stop
+hook: Stop Completed
+tokens used
+62,820
+FAIL
+
+## Spec findings
+
+1. **Critical — S5 is unreachable from the product.** [bootstrap/__init__.py:14](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/__init__.py:14)  
+   Repository-wide search finds `parse_move`, `draft_company`, and `merge_csv` called only by tests. Typed input, URL submission, CSV drop, editable-card corrections, and reload behavior required by [countermove.md:208](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/countermove.md:208) are not connected.  
+   **Fix:** integrate these APIs into the application handlers/UI and add connected tests.
+
+2. **High — “No tree is built” tests prove nothing.** [test_bootstrap.py:94](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/test_bootstrap.py:94)  
+   The tests create an unrelated local `tree`, never pass it to production code, then assert it remained untouched.  
+   **Fix:** exercise the real submit-to-tree path and assert the builder/store is never called for questions, non-price moves, empty input, and unknown plans.
+
+3. **High — contradictory and stale price moves become executable `open_pr` actions.** [bootstrap/move_parse.py:135](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/move_parse.py:135)  
+   Probes showed `Raise Pro from $59 to $49` and `Lower Pro from $49 to $59` are accepted. The parser also never checks that `from` matches the company’s current price. Invalid ISO dates raise uncaught `ValueError`.  
+   **Fix:** validate direction, positivity, unequal prices, current-price agreement, and dates; return a typed rejection for invalid input.
+
+4. **High — competitors bypass the routed website draft.** [bootstrap/company_draft.py:128](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:128)  
+   The routed site scrape is genuine and the resulting object passes `company.schema.json`, but competitors and prices are silently copied from the contract fixture at [company_draft.py:169](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:169). The mirror contains no competitors, while the trace claims their “listed prices” were added.  
+   **Fix:** source competitors through routed calls and trace their provenance, or explicitly surface them as assumed fixture data.
+
+5. **Medium — malformed CSV can avoid the promised loud rejection.** [bootstrap/csv_merge.py:60](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/csv_merge.py:60)  
+   Non-strict parsing turns `"sm"b",1,0.2` into an unmatched segment named `smb"` instead of rejecting it. `customers=inf` escapes as `OverflowError`, not `CsvMergeError`. Churn above 1 is correctly rejected, but untested.  
+   **Fix:** use strict CSV parsing, catch iteration-time `csv.Error` and numeric overflow, reject duplicate headers, and add malformed-quote, infinity, and churn-boundary tests.
+
+## Standards findings
+
+6. **Medium — `draft_company` has divergent responsibilities.** [bootstrap/company_draft.py:75](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:75)  
+   Router setup, fetching, snapshotting, HTML parsing, fixture injection, defaults, tracing, and session mutation are combined.  
+   **Fix:** extract a pure `parse_company_page(content)` module and retain orchestration in `draft_company`.
+
+7. **Low — price extraction is duplicated.** [bootstrap/company_draft.py:114](/Users/fourcolors/Projects/6_hackathons/AgentHarnessHackathon/countermove/bootstrap/company_draft.py:114)  
+   `extract_facts(content)` already extracts the price, immediately followed by another `extract_price(content)` call.  
+   **Fix:** use one extraction result.
+
+## Verification
+
+`python3 -m unittest test_bootstrap -v` ran 16 tests: 15 passed; the session-store test errored because the read-only review environment had no writable temporary directory. This environmental error does not affect the substantive FAIL verdict.
+
+The diff is otherwise correctly scoped to the six requested S5 files. Router use, schema conformance, `assumed=true` defaults, unmatched-row returns, and churn `> 1` rejection were confirmed.
+EXIT_CODE=0
