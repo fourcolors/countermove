@@ -25,6 +25,8 @@ Status values: `todo` / `in-progress` / `review` / `done` / `cut`.
 | S7 | Gate | 3 | S6, S4, S2 | done | #19 merged | FAIL then fixed, passed | pending post-merge |
 | S8 | Session and watch trigger | 3 | S6 | done | #21 merged | FAIL then fixed, passed | pending post-merge |
 | S9 | What-if (first to cut) | 3 | S6, S2 | done | #22 merged | FAIL then fixed, passed | pending post-merge |
+| - | LLM move understanding (llm-move-parse, PR 25) | - | - | review | llm-move-parse / #25 | FAIL then fixed, passed | 2 fixed pre-review, 3 fixed in-round |
+| - | Decision tree graph UI (tree-graph-ui) | - | - | in-progress | tree-graph-ui | pending | pending |
 
 ## Log
 

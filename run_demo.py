@@ -17,6 +17,11 @@ from orchestrator.session_store import SessionStore
 from orchestrator.tool_router import ToolRouter
 from orchestrator.trace import emit
 from bootstrap.move_parse import parse_move
+from bootstrap.llm_parse import (
+    accept_normalized_move,
+    normalize_move,
+    reconstruct_canonical,
+)
 from bootstrap.company_draft import draft_company
 import gather as gather_mod
 from tree import build, responses
@@ -28,7 +33,7 @@ SESSION_DIR = Path(__file__).parent / "session"
 MIRRORS = Path(__file__).parent / "mirrors"
 
 
-def main(sentence: str) -> None:
+def main(sentence: str, runner=None):
     client = importlib.import_module("gather.client").MirrorScrapeClient(str(MIRRORS))
     ctx = start_session(str(SESSION_DIR), client, ToolRouter)
     session = consume(ctx)
@@ -43,9 +48,26 @@ def main(sentence: str) -> None:
 
     move = parse_move(sentence, company)
     if not isinstance(move, dict):
-        print("move rejected:", getattr(move, "kind", "?"), "-", getattr(move, "reply", ""))
-        SessionStore(str(SESSION_DIR)).save(session)
-        return
+        normalized = normalize_move(
+            sentence, company, runner=runner, strict_reply=move.reply
+        )
+        if isinstance(normalized, str):
+            move = accept_normalized_move(sentence, normalized, company)
+            if isinstance(move, dict):
+                emit(
+                    session,
+                    "orchestrator",
+                    "did",
+                    "interpreted your message as: %s" % reconstruct_canonical(move),
+                )
+            else:
+                SessionStore(str(SESSION_DIR)).save(session)
+                print(move.reply)
+                return move
+        else:
+            SessionStore(str(SESSION_DIR)).save(session)
+            print(normalized.reply)
+            return normalized
     session["move"] = move
     emit(session, "orchestrator", "did", f"understood the move: {move['plan']} ${move['from']} to ${move['to']}")
 
