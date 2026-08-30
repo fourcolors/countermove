@@ -1,6 +1,7 @@
 """Reload a saved session and look up the last decision for a plan."""
 
 import copy
+from datetime import datetime, timezone
 
 from orchestrator.session_store import SessionStore
 
@@ -12,6 +13,28 @@ def restore(session_dir):
     the session store JSON round-trip. Missing files yield a fresh session.
     """
     return SessionStore(session_dir).load()
+
+
+def record_decision(session, decision):
+    """Append a decision with a persisted ISO timestamp at write time.
+
+    A caller-supplied `ts` is kept when it is a non-empty string so tests
+    can backdate a window. Otherwise the current UTC instant is stored.
+    """
+    if not isinstance(session, dict):
+        raise TypeError("session must be a dict")
+    if not isinstance(decision, dict):
+        raise TypeError("decision must be a dict")
+    stored = copy.deepcopy(decision)
+    ts = stored.get("ts")
+    if not isinstance(ts, str) or not ts.strip():
+        stored["ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    items = session.get("decisions")
+    if not isinstance(items, list):
+        items = []
+        session["decisions"] = items
+    items.append(stored)
+    return copy.deepcopy(stored)
 
 
 def previous_decision(session, plan_id):

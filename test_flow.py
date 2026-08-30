@@ -54,7 +54,7 @@ def make_denied_session():
             "action": "open_pr",
             "from": 49,
             "to": 59,
-            "watch_trigger": recommendation["watch_trigger"],
+            "decided_at": "2026-08-29T00:00:00Z", "watch_trigger": recommendation["watch_trigger"],
             "winning_branch_id": recommendation["path_id"],
             "root_hash": session["tree"]["root_hash"],
         }
@@ -130,7 +130,7 @@ class TestRestore(unittest.TestCase):
                 "plan": "pro",
                 "status": "denied",
                 "reason": "Still too soon.",
-                "watch_trigger": session["decisions"][0]["watch_trigger"],
+                "decided_at": "2026-08-29T00:00:00Z", "watch_trigger": session["decisions"][0]["watch_trigger"],
             }
         )
         prev = previous_decision(session, "pro")
@@ -267,7 +267,7 @@ class TestWatchTrigger(unittest.TestCase):
         result = check_watch_trigger(run, MirrorScrapeClient(), router)
         self.assertEqual(
             result,
-            {"fired": False, "observed_price": None, "trigger": None},
+            {"fired": False, "observed_price": None, "trigger": None, "expired": False},
         )
         self.assertEqual(router.calls, [])
         self.assertEqual(run["trace"], [])
@@ -275,12 +275,12 @@ class TestWatchTrigger(unittest.TestCase):
     def test_malformed_trigger_is_a_quiet_no_op(self):
         run = new_session()
         run["company"] = load_json("company.json")
-        run["decisions"] = [{"plan": "pro", "watch_trigger": "Rival A below 42"}]
+        run["decisions"] = [{"plan": "pro", "decided_at": "2026-08-29T00:00:00Z", "watch_trigger": "Rival A below 42"}]
         router = RecordingRouter(run)
         result = check_watch_trigger(run, MirrorScrapeClient(), router)
         self.assertEqual(
             result,
-            {"fired": False, "observed_price": None, "trigger": None},
+            {"fired": False, "observed_price": None, "trigger": None, "expired": False},
         )
         self.assertEqual(router.calls, [])
         self.assertEqual(run["trace"], [])
@@ -293,3 +293,69 @@ class TestWatchTrigger(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EntrypointTests(unittest.TestCase):
+    def _seed(self, td, decisions):
+        from orchestrator.session_store import SessionStore, new_session
+        import json as _json
+        session = new_session()
+        session["company"] = _json.load(open("contracts/fixtures/company.json"))
+        session["trace"] = [{"ts": "2026-08-29T10:00:00Z", "actor": "orchestrator",
+                             "column": "did", "text": "prior-run event", "tool": None, "detail": {}}]
+        session["decisions"] = decisions
+        SessionStore(td).save(session)
+
+    def _client(self):
+        import importlib
+        return importlib.import_module("gather.client").MirrorScrapeClient("mirrors")
+
+    def _start(self, td):
+        from flow.entry import start_session
+        from orchestrator.tool_router import ToolRouter
+        return start_session(td, self._client(), ToolRouter)
+
+    def test_watch_report_is_first_after_run_boundary(self):
+        import tempfile
+        from flow.entry import begin_tree, consume
+        with tempfile.TemporaryDirectory() as td:
+            self._seed(td, [{"plan": "pro", "outcome": "denied", "reason": "r",
+                             "decided_at": "2026-08-29T00:00:00Z",
+                             "watch_trigger": {"competitor": "Rival A", "threshold": 42,
+                                                "window_days": 30, "statement": "s"}}])
+            ctx = self._start(td)
+            trace = ctx["session"]["trace"]
+            boundary = next(i for i, e in enumerate(trace)
+                            if (e.get("detail") or {}).get("run_boundary"))
+            self.assertGreater(boundary, 0, "prior-run events must precede the boundary")
+            self.assertIn("rival a", trace[boundary + 1]["text"].lower())
+            with self.assertRaises(RuntimeError):
+                begin_tree(ctx)
+            consume(ctx)
+            self.assertIs(begin_tree(ctx), ctx["session"])
+            self.assertEqual(ctx["previous_decision"]["reason"], "r")
+
+    def test_newer_decision_without_trigger_deactivates_older(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            self._seed(td, [
+                {"plan": "pro", "outcome": "denied", "reason": "old",
+                 "decided_at": "2026-08-01T00:00:00Z",
+                 "watch_trigger": {"competitor": "Rival A", "threshold": 42,
+                                    "window_days": 30, "statement": "s"}},
+                {"plan": "pro", "outcome": "approved", "reason": "newer, no trigger",
+                 "decided_at": "2026-08-28T00:00:00Z"},
+            ])
+            ctx = self._start(td)
+            self.assertIsNone(ctx["watch_result"]["trigger"], "stale trigger resurrected")
+
+    def test_expired_window_reports_expiry_not_price(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            self._seed(td, [{"plan": "pro", "outcome": "denied", "reason": "r",
+                             "decided_at": "2026-01-01T00:00:00Z",
+                             "watch_trigger": {"competitor": "Rival A", "threshold": 42,
+                                                "window_days": 30, "statement": "s"}}])
+            ctx = self._start(td)
+            self.assertTrue(ctx["watch_result"]["expired"])
+            self.assertIsNone(ctx["watch_result"]["observed_price"])

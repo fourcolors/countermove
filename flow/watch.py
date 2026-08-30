@@ -23,9 +23,17 @@ def check_watch_trigger(session, client, router):
             "competitor pages are never fetched around it"
         )
 
-    trigger = _stored_trigger(session)
+    trigger, decided_at = _stored_trigger(session)
     if trigger is None:
-        return {"fired": False, "observed_price": None, "trigger": None}
+        return {"fired": False, "observed_price": None, "trigger": None, "expired": False}
+
+    if _expired(trigger, decided_at):
+        emit(session, "orchestrator", "did",
+             "the watch on %s has expired (%s-day window passed); not checked"
+             % (trigger["competitor"], trigger.get("window_days")),
+             tool=None, detail={"trigger": copy.deepcopy(trigger), "expired": True})
+        return {"fired": False, "observed_price": None,
+                "trigger": copy.deepcopy(trigger), "expired": True}
 
     competitor = trigger["competitor"]
     threshold = float(trigger["threshold"])
@@ -60,21 +68,48 @@ def check_watch_trigger(session, client, router):
         "fired": fired,
         "observed_price": observed_price,
         "trigger": copy.deepcopy(trigger),
+        "expired": False,
     }
 
 
 def _stored_trigger(session):
+    """Only the LATEST decision's trigger counts.
+
+    A newer decision without a trigger deactivates older ones; searching
+    backward for any valid trigger would resurrect stale watches.
+    Returns (trigger_or_None, decided_at_iso_or_None).
+    """
     if not isinstance(session, dict):
-        return None
+        return None, None
     items = session.get("decisions")
-    if isinstance(items, list):
-        for item in reversed(items):
-            if not isinstance(item, dict):
-                continue
-            trigger = item.get("watch_trigger")
+    if isinstance(items, list) and items:
+        latest = items[-1]
+        if isinstance(latest, dict):
+            trigger = latest.get("watch_trigger")
             if _valid_trigger(trigger):
-                return trigger
-    return None
+                return trigger, latest.get("decided_at")
+    return None, None
+
+
+def _expired(trigger, decided_at):
+    """A trigger with a window is expired once window_days have passed
+    since the persisted decision timestamp; with no timestamp or no
+    window it never silently fires stale - no window means no expiry,
+    but a window with a missing timestamp is treated as expired."""
+    import datetime as _dt
+    window = trigger.get("window_days")
+    if window is None:
+        return False
+    if not isinstance(decided_at, str):
+        return True
+    try:
+        decided = _dt.datetime.fromisoformat(decided_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    now = _dt.datetime.now(_dt.timezone.utc)
+    if decided.tzinfo is None:
+        decided = decided.replace(tzinfo=_dt.timezone.utc)
+    return (now - decided).days > float(window)
 
 
 def _valid_trigger(trigger):
