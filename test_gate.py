@@ -10,11 +10,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import gate
 from contracts.test_contracts import validate as validate_contract
 from gate.pending import build_pending_action
-from gate.repo import LocalRepoClient
+from gate.repo import GitHubRepoClient, LocalRepoClient
 from gate.service import GateService
-from gate.tokens import GateRefused, ui_allow
+from gate.tokens import GateRefused
+from gate.ui import ui_allow
 from orchestrator import new_session
 from orchestrator.trace import validate as validate_trace
 
@@ -208,6 +210,70 @@ class GateTests(unittest.TestCase):
         self.assertEqual(self.repo.opened_prs, [])
         self.assertNotIn("_approval_token_hash", self.session["decisions"][0])
         self.assertIn("provenance", self.session["trace"][-1]["detail"]["reason"])
+
+    def test_memo_swapped_for_malicious_body_with_right_root_hash_is_refused(self):
+        action = self.pending()
+        self.gate.queue(action)
+        token = ui_allow(self.session, action["id"])
+        self.session["decisions"][0]["memo_markdown"] = (
+            f"# MALICIOUS BODY\n\nRoot hash: `{self.tree['root_hash']}`\n"
+        )
+
+        with self.assertRaises(GateRefused):
+            self.gate.approve(action["id"], token)
+
+        self.assertEqual(self.repo.opened_prs, [])
+        self.assertIn("artifact", self.session["trace"][-1]["detail"]["reason"])
+
+    def test_price_changed_to_999_with_matching_yaml_is_refused(self):
+        action = self.pending()
+        self.gate.queue(action)
+        token = ui_allow(self.session, action["id"])
+        stored = self.session["decisions"][0]
+        stored["change"]["to"] = 999
+        stored["change"]["pricing_yaml"] = "plan: pro\nprice: 999\n"
+
+        with self.assertRaises(GateRefused):
+            self.gate.approve(action["id"], token)
+
+        self.assertEqual(self.repo.opened_prs, [])
+        self.assertIn("artifact", self.session["trace"][-1]["detail"]["reason"])
+
+    def test_public_exports_cannot_mint_tokens_or_write(self):
+        self.assertEqual(set(gate.__all__), {"GateService", "build_pending_action"})
+        public = [getattr(gate, name) for name in gate.__all__]
+        self.assertNotIn(ui_allow, public)
+        self.assertNotIn(GitHubRepoClient, public)
+        for exported in public:
+            for capability in (
+                "mint_approval_token",
+                "create_branch",
+                "write_files",
+                "open_pr",
+            ):
+                self.assertFalse(hasattr(exported, capability))
+
+    def test_deny_ignores_absolute_path_in_hostile_action(self):
+        action = self.pending()
+        escaped = self.root / "ABSOLUTE-ESCAPE.md"
+        action["change"]["memo_path"] = str(escaped)
+        self.gate.queue(action)
+
+        path = self.gate.deny(action["id"], "No absolute writes.")
+
+        self.assertFalse(escaped.exists())
+        path.resolve().relative_to((self.root / "session").resolve())
+
+    def test_deny_ignores_parent_traversal_in_hostile_action(self):
+        action = self.pending()
+        escaped = self.root / "TRAVERSAL-ESCAPE.md"
+        action["change"]["memo_path"] = "../TRAVERSAL-ESCAPE.md"
+        self.gate.queue(action)
+
+        path = self.gate.deny(action["id"], "No traversal writes.")
+
+        self.assertFalse(escaped.exists())
+        path.resolve().relative_to((self.root / "session").resolve())
 
     def test_memo_fence_contains_nested_markdown_and_diff_is_price_only(self):
         tree = copy.deepcopy(self.tree)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import difflib
 import json
 import re
@@ -106,13 +107,18 @@ def _render_memo(fields: _MemoFields) -> str:
     )
 
 
-def build_pending_action(
+def _memo_path(plan_id: str, effective: str) -> str:
+    date.fromisoformat(effective)
+    slug = re.sub(r"[^a-z0-9]+", "-", plan_id.lower()).strip("-") or "plan"
+    return f"decisions/{effective}-{slug}-price.md"
+
+
+def _build_artifacts(
     tree: Mapping[str, Any],
     recommendation: Mapping[str, Any],
     move: Mapping[str, Any],
-    company: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Build a schema-compatible pending action without writing anything."""
+    """Deterministically render every artifact committed by approval."""
 
     plan_id = move.get("plan")
     old_price = move.get("from")
@@ -120,8 +126,10 @@ def build_pending_action(
     effective = move.get("effective")
     winning_id = recommendation.get("path_id")
     root_hash = tree.get("root_hash")
-    if not isinstance(plan_id, str) or not isinstance(effective, str):
-        raise ValueError("move must contain string plan and effective fields")
+    if not isinstance(plan_id, str) or not plan_id:
+        raise ValueError("move.plan must be a non-empty string")
+    if not isinstance(effective, str):
+        raise ValueError("move.effective must be a string")
     if not isinstance(old_price, (int, float)) or isinstance(old_price, bool):
         raise ValueError("move.from must be numeric")
     if not isinstance(new_price, (int, float)) or isinstance(new_price, bool):
@@ -131,7 +139,6 @@ def build_pending_action(
     if not isinstance(root_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", root_hash):
         raise ValueError("tree.root_hash must be a lowercase SHA-256 digest")
 
-    plan_name = _display_plan(company, plan_id)
     path = _winning_path(tree, winning_id)
     winner = path[-1]
     reasoning_parts = [
@@ -143,14 +150,15 @@ def build_pending_action(
     assumptions = json.dumps(
         winner.get("assumptions") or {}, ensure_ascii=False, indent=2, sort_keys=True
     )
-    fields = _MemoFields(
-        winning_branch=winning_id,
-        score_band=_format_band(recommendation.get("band") or {}),
-        assumptions=_fenced(assumptions),
-        root_hash=root_hash,
-        reasoning=reasoning,
+    memo = _render_memo(
+        _MemoFields(
+            winning_branch=winning_id,
+            score_band=_format_band(recommendation.get("band") or {}),
+            assumptions=_fenced(assumptions),
+            root_hash=root_hash,
+            reasoning=reasoning,
+        )
     )
-
     old_yaml = f"plan: {plan_id}\nprice: {old_price:g}\n"
     new_yaml = f"plan: {plan_id}\nprice: {new_price:g}\n"
     diff = "".join(
@@ -161,15 +169,45 @@ def build_pending_action(
             tofile="b/pricing.yaml",
         )
     )
-    slug = re.sub(r"[^a-z0-9]+", "-", plan_id.lower()).strip("-") or "plan"
+    memo_path = _memo_path(plan_id, effective)
+    return {
+        "diff": diff,
+        "memo_markdown": memo,
+        "files": {"pricing.yaml": new_yaml, memo_path: memo},
+        "memo_path": memo_path,
+        "plan": plan_id,
+        "from": old_price,
+        "to": new_price,
+        "effective": effective,
+        "winning_branch_id": winning_id,
+        "root_hash": root_hash,
+    }
+
+
+def build_pending_action(
+    tree: Mapping[str, Any],
+    recommendation: Mapping[str, Any],
+    move: Mapping[str, Any],
+    company: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a schema-compatible pending action without writing anything."""
+
+    artifacts = _build_artifacts(tree, recommendation, move)
+    plan_id = artifacts["plan"]
+    old_price = artifacts["from"]
+    new_price = artifacts["to"]
+    effective = artifacts["effective"]
+    winning_id = artifacts["winning_branch_id"]
+    root_hash = artifacts["root_hash"]
+    plan_name = _display_plan(company, plan_id)
     return {
         "id": f"act-{uuid.uuid4().hex}",
         "sentence": (
             f"Open a change request to raise {plan_name} to ${new_price:g} "
             f"on {_display_date(effective)}?"
         ),
-        "diff": diff,
-        "memo_markdown": _render_memo(fields),
+        "diff": artifacts["diff"],
+        "memo_markdown": artifacts["memo_markdown"],
         "winning_branch_id": winning_id,
         "root_hash": root_hash,
         "status": "waiting",
@@ -182,7 +220,13 @@ def build_pending_action(
             "from": old_price,
             "to": new_price,
             "effective": effective,
-            "pricing_yaml": new_yaml,
-            "memo_path": f"decisions/{effective}-{slug}-price.md",
+            "pricing_yaml": artifacts["files"]["pricing.yaml"],
+            "memo_path": artifacts["memo_path"],
+        },
+        # Private, canonical inputs retained so approval can regenerate every
+        # artifact rather than trusting mutable display or execution fields.
+        "_gate_source": {
+            "move": copy.deepcopy(dict(move)),
+            "recommendation": copy.deepcopy(dict(recommendation)),
         },
     }

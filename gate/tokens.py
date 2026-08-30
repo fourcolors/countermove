@@ -1,4 +1,4 @@
-"""Single-use approval capabilities minted only by the UI Allow path."""
+"""Private single-use approval capability primitives."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ class GateRefused(RuntimeError):
     """The gate refused an action because an authorization invariant failed."""
 
 
-def mint_approval_token() -> str:
+def _mint_approval_token() -> str:
     """Create an opaque capability.
 
     This function deliberately does not bind or persist the token.  Only
-    :func:`ui_allow` does that, so merely calling this primitive cannot
-    authorize a queued action.
+    :func:`gate.ui.ui_allow` does that, so merely calling this primitive cannot
+    authorize a queued action.  It remains private to the gate package.
     """
 
     return secrets.token_urlsafe(32)
@@ -45,22 +45,6 @@ def _refuse(session: dict[str, Any], action_id: str, reason: str) -> None:
         detail={"action_id": action_id, "reason": reason},
     )
     raise GateRefused(reason)
-
-
-def ui_allow(session: dict[str, Any], action_id: str) -> str:
-    """Handle the human Allow click and bind a fresh token to one action.
-
-    No queue or programmatic approval API calls this function.  The returned
-    plaintext token is shown only to the immediate UI-to-gate call; the
-    session retains its SHA-256 digest.
-    """
-
-    action = _find_waiting_action(session, action_id)
-    if action is None:
-        _refuse(session, action_id, "the action is not waiting for approval")
-    token = mint_approval_token()
-    action["_approval_token_hash"] = _token_digest(token)
-    return token
 
 
 def consume_approval_token(
