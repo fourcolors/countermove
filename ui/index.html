@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Countermove — Decision workspace</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <!--
+      THESIS: A decision should read like a calm conversation, not an analytics dashboard.
+      OWN-WORLD: Cool paper, deep navy ink, leaf green actions, and ruled working notes.
+      STORY: Confirm the business, inspect possible reactions, understand the recommendation, approve once.
+      FIRST VIEWPORT: A compact masthead, live conversation at left, and a quiet three-state trace at right.
+      FORM: An editorial decision ledger shaped as an operate surface; the supplied brief fixes the structure.
+    -->
+    <a class="skip-link" href="#conversation">Skip to conversation</a>
+    <header class="topbar">
+      <div class="brand" aria-label="Countermove home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>Countermove</span>
+      </div>
+      <div class="topbar-actions">
+        <span class="session-state"><span aria-hidden="true"></span> Decision ready</span>
+        <label class="advanced-toggle">
+          <span>Advanced view</span>
+          <input id="advanced-toggle" type="checkbox" role="switch" aria-describedby="advanced-help">
+          <span class="switch" aria-hidden="true"></span>
+        </label>
+        <span id="advanced-help" class="sr-only">Shows raw values, ranges, and calculation details.</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section id="conversation" class="conversation" aria-labelledby="conversation-title">
+        <div class="conversation-heading">
+          <div>
+            <p class="kicker">Pricing decision</p>
+            <h1 id="conversation-title">A careful look before you move.</h1>
+          </div>
+          <span class="date-stamp">Aug 29</span>
+        </div>
+
+        <div id="conversation-feed" class="conversation-feed" aria-live="polite">
+          <div class="loading-state" role="status">
+            <span class="loading-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>Preparing your decision…</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="trace-panel" aria-labelledby="trace-title">
+        <div class="trace-heading">
+          <div>
+            <p class="kicker">Work trace</p>
+            <h2 id="trace-title">What’s happening</h2>
+          </div>
+          <span class="trace-live" aria-label="Trace is live">Live</span>
+        </div>
+        <div id="trace-grid" class="trace-grid"></div>
+      </aside>
+    </main>
+
+    <template id="message-template">
+      <article class="message">
+        <div class="avatar" aria-hidden="true">C</div>
+        <div class="message-content"></div>
+      </article>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
