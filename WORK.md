@@ -16,7 +16,7 @@ Status values: `todo` / `in-progress` / `review` / `done` / `cut`.
 | Slice | Title | Wave | Depends | Status | Branch / PR | Adversarial review | Qodo |
 |---|---|---|---|---|---|---|---|
 | S0 | Rails | 0 | - | in-progress | main (bootstrap pushed) | - | installed; reviewed #9, #10 |
-| S1 | Scorer | 1 | S0 | todo | - | - | - |
+| S1 | Scorer | 1 | S0 | review | s1-scorer / PR pending | pending | pending |
 | S2 | Provenance lib | 1 | S0 | todo | - | - | - |
 | S3 | Gather | 1 | S0 | todo | - | - | - |
 | S4 | UI shell and widgets | 1 | S0 | todo | - | - | - |
