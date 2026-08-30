@@ -40,6 +40,37 @@ def leaf(c_prime=45, eps=None, choice="hold"):
     return {"id": "leaf-test", "choice": choice, "assumptions": assumptions}
 
 
+class ReviewRegressionTests(unittest.TestCase):
+    def test_displayed_eta_matches_segment_cross_elasticity(self):
+        co = company()
+        co["plans"][0]["segments"][0]["cross_elasticity"] = 0.3
+        result = score.score_leaf(co, move(), leaf())
+        self.assertEqual(result["assumptions"]["eta"], 0.3)
+
+    def test_displayed_eta_is_per_segment_when_segments_differ(self):
+        co = company()
+        co["plans"][0]["segments"].append({
+            "id": "mid", "customers": 120, "monthly_churn": 0.02,
+            "elasticity": -0.8, "cross_elasticity": 0.3,
+        })
+        result = score.score_leaf(co, move(), leaf())
+        self.assertEqual(result["assumptions"]["eta"], {"smb": 0.4, "mid": 0.3})
+
+    def test_unresolvable_competitor_prices_raise(self):
+        bad = {"id": "leaf-x", "choice": "hold", "parent": "not-a-response", "assumptions": {}}
+        with self.assertRaises(ValueError):
+            score.score_leaf(company(), move(), bad)
+
+    def test_expanded_high_band_is_strictly_negative(self):
+        for mid in (-0.05, -0.1, -0.15, -1.1):
+            self.assertLess(score.expand_elasticity(mid)["high"], 0.0)
+
+    def test_monthly_sum_matches_pinned_formula(self):
+        expected = 300 * sum((1 - 0.04) ** t for t in range(1, 7))
+        self.assertAlmostEqual(
+            score.surviving_customer_months(300, 0.04, 6), expected, places=9)
+
+
 class FeatureScorerTests(unittest.TestCase):
     def test_baseline_equals_no_move_revenue(self):
         result = score.score_leaf(company(), move(49), leaf())

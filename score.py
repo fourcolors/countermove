@@ -46,7 +46,8 @@ def expand_elasticity(value: float | Mapping[str, float]) -> dict[str, float]:
     return {
         "low": round(mid - 0.15, 12),
         "mid": mid,
-        "high": min(round(mid + 0.15, 12), 0.0),
+        # The spec pins "high clamped below 0": strictly negative, never 0.
+        "high": min(round(mid + 0.15, 12), -0.01),
     }
 
 
@@ -175,7 +176,10 @@ def competitor_prices(company: Mapping[str, Any], move: Mapping[str, Any], leaf:
                 after_by_name = dict(before_by_name)
                 after_by_name[name] = response_prices[choice]
                 return c, _mean(list(after_by_name.values()))
-    return c, c
+    raise ValueError(
+        "leaf carries no competitor price resolution: expected assumptions overrides "
+        "or a parent id of the form resp-<competitor>-<choice>"
+    )
 
 
 def _plan(company: Mapping[str, Any], plan_id: str) -> Mapping[str, Any]:
@@ -207,12 +211,14 @@ def score_leaf(company: Mapping[str, Any], move: Mapping[str, Any], leaf: Mappin
     totals = {band: 0.0 for band in BANDS}
     baseline_revenue = 0.0
     ranges: dict[str, dict[str, float]] = {}
+    etas: dict[str, float] = {}
 
     for segment in plan.get("segments", []):
         segment_id = str(segment["id"])
         customers = float(segment["customers"])
         churn = float(segment["monthly_churn"])
         eta = float((leaf.get("assumptions") or {}).get("eta", segment.get("cross_elasticity", 0.4)))
+        etas[segment_id] = eta
         eps = _elasticities(segment, leaf)
         ranges[segment_id] = eps
         organic_customer_months = surviving_customer_months(customers, churn, months)
@@ -225,7 +231,8 @@ def score_leaf(company: Mapping[str, Any], move: Mapping[str, Any], leaf: Mappin
     scores = {band: totals[band] - baseline_revenue for band in BANDS}
     assumptions_out: dict[str, Any] = {
         "eps": next(iter(ranges.values())) if len(ranges) == 1 else ranges,
-        "eta": (leaf.get("assumptions") or {}).get("eta", 0.4),
+        # Displayed eta mirrors the per-segment values actually used in the loop.
+        "eta": next(iter(etas.values())) if len(etas) == 1 else etas,
         "c_prime_convention": C_PRIME_CONVENTION,
         "competitor_average_before": c,
         "competitor_average_after": c_prime,
