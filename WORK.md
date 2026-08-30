@@ -18,17 +18,19 @@ Status values: `todo` / `in-progress` / `review` / `done` / `cut`.
 | S0 | Rails | 0 | - | done | #11 #16 merged | FAIL then fixed, passed | Highs resolved |
 | S1 | Scorer | 1 | S0 | done | #12 merged | FAIL then fixed, passed | Highs resolved |
 | S2 | Provenance lib | 1 | S0 | done | #13 merged | FAIL then fixed, passed | Highs resolved |
-| S3 | Gather | 1 | S0 | review | s3-gather / #18 | FAIL then fixed, passed | pending |
+| S3 | Gather | 1 | S0 | done | #18 merged | FAIL then fixed, passed | Highs resolved |
 | S4 | UI shell and widgets | 1 | S0 | done | #14 merged | FAIL then fixed, passed | Highs resolved |
-| S5 | Company bootstrap | 2 | S3, S4 | in-progress | s5-bootstrap | - | - |
+| S5 | Company bootstrap | 2 | S3, S4 | done | #20 merged | FAIL then fixed, passed | Highs resolved |
 | S6 | Tree | 2 | S1, S2, S3 | done | #17 merged | FAIL then fixed, passed | pending post-merge |
-| S7 | Gate | 3 | S6, S4, S2 | in-progress | s7-gate | - | - |
-| S8 | Session and watch trigger | 3 | S6 | todo | - | - | - |
-| S9 | What-if (first to cut) | 3 | S6, S2 | todo | - | - | - |
+| S7 | Gate | 3 | S6, S4, S2 | done | #19 merged | FAIL then fixed, passed | pending post-merge |
+| S8 | Session and watch trigger | 3 | S6 | done | #21 merged | FAIL then fixed, passed | pending post-merge |
+| S9 | What-if (first to cut) | 3 | S6, S2 | done | #22 merged | FAIL then fixed, passed | pending post-merge |
 
 ## Log
 
 Append-only, newest first, one line per transition.
+
+- 2026-08-29: ALL TEN SLICES MERGED (PRs 11-22). Integration pass begins: demo driver, UI-to-session wiring, approve endpoint, runbook.
 
 - 2026-08-29: S3 in progress on s3-gather - gather through the tool router, committed mirrors, snapshots, and stdlib tests.
 - 2026-08-29: S0 partially complete - repo created, plan + README + env template pushed; remaining: TrueForge hello-world, Qodo install, contracts/, first reviewed PR.
