@@ -3,6 +3,7 @@
 from tree.build import build_tree
 from tree.edit import edit_assumption
 from tree.recommend import recommend
+from tree.whatif import grow_branch
 from tree.responses import (
     COUNTER_CHOICES,
     LLMResponseProvider,
@@ -24,6 +25,7 @@ __all__ = [
     "ScrapeBudget",
     "build_tree",
     "edit_assumption",
+    "grow_branch",
     "recommend",
     "structured_facts",
 ]
