@@ -498,6 +498,22 @@ function renderComposer() {
         body: JSON.stringify({ sentence }),
       });
       const body = await response.json();
+      if (!body.ok && body.reply) {
+        status.remove();
+        const feed = document.querySelector("#conversation-feed");
+        const userArticle = el("article", "message message-user");
+        const userContent = el("div", "message-content");
+        userContent.append(el("p", "message-copy", sentence));
+        userArticle.append(userContent, el("div", "avatar avatar-user", "You"));
+        feed.append(userArticle);
+        createMessage(body.reply);
+        feed.append(form);
+        button.disabled = false;
+        input.disabled = false;
+        button.textContent = "Simulate";
+        input.focus();
+        return;
+      }
       if (!body.ok) throw new Error(body.error || "the simulation could not run");
       render(await loadData());
       window.scrollTo({ top: 0, behavior: "smooth" });

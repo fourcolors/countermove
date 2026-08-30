@@ -113,7 +113,7 @@ class Rejection:
     """Typed refusal. Never an executable move.
 
     kind is one of: question, out_of_scope, unknown_plan, invalid_price,
-    invalid_date.
+    invalid_date, llm_reply, llm_unavailable.
     """
 
     def __init__(self, kind, reply):

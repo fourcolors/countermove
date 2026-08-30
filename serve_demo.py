@@ -25,9 +25,23 @@ from orchestrator.session_store import SessionStore
 from gate.service import GateService
 from gate.repo import LocalRepoClient, GitHubRepoClient
 from gate import ui as gate_ui
+from bootstrap.move_parse import Rejection
 import run_demo
 
 SESSION_DIR = ROOT / "session"
+
+
+def payload_for_run(returned, stdout_text):
+    """Build the /run JSON body. Failures expose only the friendly reply."""
+    if isinstance(returned, Rejection):
+        reply = returned.reply or "the simulation did not finish"
+        return {"ok": False, "result": None, "error": reply, "reply": reply}
+    ran = "pending:" in (stdout_text or "")
+    return {
+        "ok": ran,
+        "result": stdout_text if ran else None,
+        "error": None if ran else (stdout_text or "the simulation did not finish"),
+    }
 
 
 def _repo_client():
@@ -88,11 +102,8 @@ class Handler(SimpleHTTPRequestHandler):
                 shutil.rmtree(SESSION_DIR, ignore_errors=True)
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
-                    run_demo.main(sentence)
-                text = out.getvalue().strip()
-                ran = "pending:" in text
-                payload = {"ok": ran, "result": text if ran else None,
-                           "error": None if ran else (text or "the simulation did not finish")}
+                    returned = run_demo.main(sentence)
+                payload = payload_for_run(returned, out.getvalue().strip())
                 # run_demo wrote the fresh session itself; the stale pre-run
                 # object this handler loaded must NOT be saved over it.
                 data = json.dumps(payload).encode()
