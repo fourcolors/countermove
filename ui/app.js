@@ -18,6 +18,20 @@ const state = {
   data: null,
 };
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+const RESPONSE_CHOICES = ["undercut", "match", "ignore", "raise"];
+const GRAPH = {
+  padX: 20,
+  padY: 18,
+  colGap: 32,
+  nodeW: { root: 188, response: 196, leaf: 188 },
+  nodeH: { root: 52, response: 42, leaf: 36 },
+  rowGap: 7,
+  leafGap: 6,
+};
+
+let graphDismiss = null;
+
 const humanize = (value) => ({
   smb: "Small businesses",
   mid: "Mid-sized businesses",
@@ -47,6 +61,13 @@ function signedPercent(value) {
   const number = Number(value);
   const sign = number > 0 ? "+" : number < 0 ? "−" : "";
   return `${sign}${roundedPercentNumber(number)}%`;
+}
+
+function signedPercentFixed(value) {
+  if (value === null || value === undefined || value === "n/a" || Number.isNaN(Number(value))) return "n/a";
+  const number = Number(value);
+  const sign = number > 0 ? "+" : number < 0 ? "-" : "";
+  return `${sign}${Math.abs(number).toFixed(1)}%`;
 }
 
 function signedPercentValue(value) {
@@ -92,6 +113,188 @@ function el(tag, className, text) {
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
+}
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  Object.entries(attrs || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    node.setAttribute(key, String(value));
+  });
+  return node;
+}
+
+function hasTree(tree) {
+  return Boolean(tree && Array.isArray(tree.nodes) && tree.nodes.length);
+}
+
+function actorLabel(actor) {
+  if (actor === "you") return "You";
+  if (actor === "competitor") return "Competitor";
+  return humanize(actor || "unknown");
+}
+
+function graphChoiceLabel(choice) {
+  return ({
+    hold: "Hold",
+    partial_rollback: "Partial rollback",
+    annual_discount: "Annual discount",
+    price_change: "Price change",
+    undercut: "Undercut",
+    match: "Match",
+    ignore: "Ignore",
+    raise: "Raise",
+  })[choice] || humanize(choice);
+}
+
+function responseCaption(node) {
+  const label = node.label || "";
+  const colon = label.indexOf(":");
+  if (colon === -1) {
+    return { rival: humanize(label), choice: humanize(node.choice) };
+  }
+  const rival = label.slice(0, colon).trim();
+  const choice = label.slice(colon + 1).trim() || humanize(node.choice);
+  return { rival, choice };
+}
+
+function metricTone(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || value === "n/a" || Number.isNaN(number) || number === 0) return "zero";
+  return number > 0 ? "gain" : "loss";
+}
+
+function starIcon() {
+  const svg = svgEl("svg", { viewBox: "0 0 24 24", width: "11", height: "11", "aria-hidden": "true" });
+  svg.append(svgEl("path", {
+    d: "M12 2.6l2.47 6.05 6.53.58-4.97 4.32 1.52 6.38L12 16.9l-5.55 3.03 1.52-6.38-4.97-4.32 6.53-.58z",
+  }));
+  return svg;
+}
+
+function setTruncatedText(element, text) {
+  const value = text == null ? "" : String(text);
+  element.textContent = value;
+  element.title = value;
+}
+
+function edgePath(from, to) {
+  const x1 = from.x + from.w;
+  const y1 = from.y + from.h / 2;
+  const x2 = to.x;
+  const y2 = to.y + to.h / 2;
+  const dx = Math.max(28, (x2 - x1) * 0.55);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+}
+
+function ancestorIds(nodes, startId) {
+  const ids = new Set();
+  let current = startId;
+  while (current && nodes.has(current)) {
+    ids.add(current);
+    current = nodes.get(current).parent;
+  }
+  return ids;
+}
+
+function formatRate(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function assumptionRows(assumptions) {
+  if (!assumptions || typeof assumptions !== "object") return [];
+  const rows = [];
+  if (assumptions.months != null) rows.push(["Horizon", `${assumptions.months} months`]);
+  const before = assumptions.competitor_average_before;
+  const after = assumptions.competitor_average_after;
+  if (before != null && after != null) {
+    rows.push(["Competitor average", `${money(before)} → ${money(after)}`]);
+  } else if (after != null) {
+    rows.push(["Competitor average after", money(after)]);
+  } else if (before != null) {
+    rows.push(["Competitor average before", money(before)]);
+  }
+  if (assumptions.c_prime_convention) {
+    rows.push(["Average convention", String(assumptions.c_prime_convention)]);
+  }
+  const counter = assumptions.counter;
+  if (counter && typeof counter === "object") {
+    const bits = [];
+    if (counter.choice) bits.push(humanize(counter.choice));
+    if (counter.rollback_fraction != null) bits.push(`${formatRate(counter.rollback_fraction)} rollback`);
+    if (counter.discount_rate != null) bits.push(`${formatRate(counter.discount_rate)} discount`);
+    if (counter.uptake != null) bits.push(`${formatRate(counter.uptake)} uptake`);
+    if (bits.length) rows.push(["Counter", bits.join(" · ")]);
+  }
+  return rows;
+}
+
+function detailRow(term, value, extraClass) {
+  const row = el("div", "tree-detail-row");
+  const text = el("span", extraClass ? `tree-detail-value ${extraClass}` : "tree-detail-value", value);
+  row.append(el("span", "tree-detail-term", term), text);
+  return row;
+}
+
+function layoutGraph(root, responses, nodes, expanded) {
+  const positions = new Map();
+  const rootX = GRAPH.padX;
+  const respX = GRAPH.padX + GRAPH.nodeW.root + GRAPH.colGap;
+  const leafX = respX + GRAPH.nodeW.response + GRAPH.colGap;
+  let y = GRAPH.padY;
+
+  responses.forEach((response) => {
+    const open = expanded.has(response.id);
+    const leaves = open
+      ? (response.children || []).map((id) => nodes.get(id)).filter(Boolean)
+      : [];
+    const leafStack = leaves.length
+      ? leaves.length * GRAPH.nodeH.leaf + (leaves.length - 1) * GRAPH.leafGap
+      : 0;
+    const blockH = Math.max(GRAPH.nodeH.response, leafStack || GRAPH.nodeH.response);
+    positions.set(response.id, {
+      x: respX,
+      y: y + (blockH - GRAPH.nodeH.response) / 2,
+      w: GRAPH.nodeW.response,
+      h: GRAPH.nodeH.response,
+      kind: "response",
+    });
+    if (leaves.length) {
+      let leafY = y + (blockH - leafStack) / 2;
+      leaves.forEach((leaf) => {
+        positions.set(leaf.id, {
+          x: leafX,
+          y: leafY,
+          w: GRAPH.nodeW.leaf,
+          h: GRAPH.nodeH.leaf,
+          kind: "leaf",
+        });
+        leafY += GRAPH.nodeH.leaf + GRAPH.leafGap;
+      });
+    }
+    y += blockH + GRAPH.rowGap;
+  });
+
+  const contentH = Math.max(GRAPH.nodeH.root, y - GRAPH.rowGap - GRAPH.padY);
+  positions.set(root.id, {
+    x: rootX,
+    y: GRAPH.padY + Math.max(0, (contentH - GRAPH.nodeH.root) / 2),
+    w: GRAPH.nodeW.root,
+    h: GRAPH.nodeH.root,
+    kind: "root",
+  });
+  const bottom = Math.max(
+    GRAPH.padY + contentH,
+    [...positions.values()].reduce((max, box) => Math.max(max, box.y + box.h), 0),
+  );
+  return {
+    positions,
+    width: leafX + GRAPH.nodeW.leaf + GRAPH.padX,
+    height: bottom + GRAPH.padY,
+    respX,
+    leafX,
+  };
 }
 
 function fixtureDomId(...parts) {
@@ -220,7 +423,7 @@ function renderTree(tree, jargon) {
   const nodes = new Map(tree.nodes.map((node) => [node.id, node]));
   const root = nodes.get("root") || tree.nodes.find((node) => node.parent === null);
   const competitorResponses = tree.nodes.filter((node) => node.actor === "competitor");
-  const content = createMessage(`I mapped ${competitorResponses.length} ways competitors could respond. Open any response to compare your three choices, then select a choice to see its likely result.`);
+  const content = createMessage(`The same ${competitorResponses.length} responses are listed below if you want to compare your three counters in one place.`);
   const widget = el("section", "tree-widget widget");
   widget.setAttribute("aria-labelledby", "tree-title");
 
@@ -293,6 +496,11 @@ function renderTree(tree, jargon) {
   calculation.append(code);
   widget.append(calculation);
   content.append(widget);
+
+  if (state.selectedLeafId) {
+    const selected = nodes.get(state.selectedLeafId);
+    if (selected) selectLeaf(selected, widget, jargon);
+  }
 }
 
 function selectLeaf(leaf, widget, jargon) {
@@ -315,6 +523,250 @@ function selectLeaf(leaf, widget, jargon) {
   );
   if (leaf.assumptions?.c_prime_convention) raw.append(advancedDetail("c_prime_convention", leaf.assumptions.c_prime_convention));
   result.append(raw);
+}
+
+function renderDecisionGraph(tree, recommendation, jargon) {
+  if (!hasTree(tree)) return;
+  if (graphDismiss) {
+    graphDismiss.abort();
+    graphDismiss = null;
+  }
+
+  const nodes = new Map(tree.nodes.map((node) => [node.id, node]));
+  const root = nodes.get(tree.root) || nodes.get("root") || tree.nodes.find((node) => node.parent === null);
+  if (!root) return;
+
+  const responses = (root.children || []).map((id) => nodes.get(id)).filter(Boolean);
+  if (!responses.length) {
+    tree.nodes.filter((node) => node.actor === "competitor").forEach((node) => responses.push(node));
+  }
+  if (!responses.length) return;
+
+  const winId = recommendation?.highlighted_path_id || recommendation?.path_id || null;
+  const runnerId = recommendation?.runner_up_id && recommendation.runner_up_id !== winId
+    ? recommendation.runner_up_id
+    : null;
+  const golden = winId ? ancestorIds(nodes, winId) : new Set();
+  const winNode = winId ? nodes.get(winId) : null;
+  const expanded = new Set();
+  if (winNode?.parent) expanded.add(winNode.parent);
+  if (winId) state.selectedLeafId = winId;
+
+  const content = createMessage("Follow each choice from your move, through a competitor response, to your counter. The recommended path is marked.");
+  const widget = document.querySelector("#decision-tree-template").content.firstElementChild.cloneNode(true);
+  const count = widget.querySelector("[data-tree-count]");
+  count.textContent = `${responses.length} responses`;
+  const stage = widget.querySelector("[data-tree-stage]");
+  const detail = widget.querySelector("[data-tree-detail]");
+  const detailActor = widget.querySelector("[data-tree-detail-actor]");
+  const detailLabel = widget.querySelector("[data-tree-detail-label]");
+  const detailBody = widget.querySelector("[data-tree-detail-body]");
+  const closeButton = widget.querySelector("[data-tree-detail-close]");
+
+  function hideDetail() {
+    detail.hidden = true;
+    detailActor.textContent = "";
+    detailLabel.textContent = "";
+    detailBody.replaceChildren();
+  }
+
+  function showDetail(node) {
+    const fullLabel = node.label && node.label !== node.choice
+      ? node.label
+      : humanize(node.choice || node.label);
+    setTruncatedText(detailLabel, fullLabel);
+    detailActor.textContent = actorLabel(node.actor);
+    detailBody.replaceChildren();
+    detailBody.append(
+      detailRow("Actor", actorLabel(node.actor)),
+      detailRow("Price", `${money(node.price_before)} → ${money(node.price_after)}`),
+    );
+    const reason = el("div", "tree-detail-row");
+    const reasonText = el("span", "tree-detail-value tree-detail-reason");
+    reasonText.textContent = node.reasoning || "No reasoning recorded.";
+    reason.append(el("span", "tree-detail-term", "Reasoning"), reasonText);
+    detailBody.append(reason);
+    const score = node.score;
+    if (score && typeof score === "object") {
+      const band = `low ${signedPercentFixed(score.low_pct)} · mid ${signedPercentFixed(score.mid_pct)} · high ${signedPercentFixed(score.high_pct)}`;
+      detailBody.append(detailRow("Score band", band, "tree-detail-band"));
+    }
+    const assumptionSummary = assumptionRows(node.assumptions);
+    if (assumptionSummary.length) {
+      assumptionSummary.forEach(([term, value]) => detailBody.append(detailRow(term, value)));
+    } else {
+      detailBody.append(detailRow("Assumptions", "No extra assumptions recorded."));
+    }
+    const sourceCount = Array.isArray(node.sources) ? node.sources.length : 0;
+    detailBody.append(detailRow("Sources", sourceCount === 1 ? "1 source" : `${sourceCount} sources`));
+    detail.hidden = false;
+  }
+
+  function paint(focusId) {
+    const layout = layoutGraph(root, responses, nodes, expanded);
+    stage.style.width = `${layout.width}px`;
+    stage.style.height = `${layout.height}px`;
+    stage.replaceChildren();
+
+    const svg = svgEl("svg", {
+      class: "decision-tree-edges",
+      viewBox: `0 0 ${layout.width} ${layout.height}`,
+      width: String(layout.width),
+      height: String(layout.height),
+      "aria-hidden": "true",
+    });
+    const normalGroup = svgEl("g", { class: "graph-edges" });
+    const goldenGroup = svgEl("g", { class: "graph-edges-golden" });
+
+    function connect(parentId, childId) {
+      const from = layout.positions.get(parentId);
+      const to = layout.positions.get(childId);
+      if (!from || !to) return;
+      const isGolden = golden.has(parentId) && golden.has(childId);
+      const path = svgEl("path", {
+        class: isGolden ? "graph-edge graph-edge-golden" : "graph-edge",
+        d: edgePath(from, to),
+      });
+      (isGolden ? goldenGroup : normalGroup).append(path);
+    }
+
+    responses.forEach((response) => {
+      connect(root.id, response.id);
+      if (!expanded.has(response.id)) return;
+      (response.children || []).forEach((leafId) => connect(response.id, leafId));
+    });
+    svg.append(normalGroup, goldenGroup);
+    stage.append(svg);
+
+    const visible = [root, ...responses];
+    responses.forEach((response) => {
+      if (!expanded.has(response.id)) return;
+      (response.children || []).forEach((leafId) => {
+        const leaf = nodes.get(leafId);
+        if (leaf) visible.push(leaf);
+      });
+    });
+
+    visible.forEach((node) => {
+      const box = layout.positions.get(node.id);
+      if (!box) return;
+      const kind = box.kind;
+      const button = el("button", `graph-node graph-node-${kind}`);
+      button.type = "button";
+      button.tabIndex = 0;
+      button.dataset.nodeId = node.id;
+      button.style.left = `${box.x}px`;
+      button.style.top = `${box.y}px`;
+      button.style.width = `${box.w}px`;
+      button.style.height = `${box.h}px`;
+
+      if (golden.has(node.id)) button.classList.add("graph-node-golden");
+      if (kind === "leaf" && node.id === runnerId) button.classList.add("graph-node-runner");
+      if (kind === "response" && !expanded.has(node.id) && runnerId && nodes.get(runnerId)?.parent === node.id) {
+        button.classList.add("graph-node-runner");
+      }
+      if (kind === "leaf" && node.id === state.selectedLeafId) button.classList.add("is-selected");
+      if (kind === "response" && expanded.has(node.id)) button.classList.add("is-expanded");
+
+      if (kind === "root") {
+        const copy = el("span", "graph-node-copy");
+        copy.append(el("span", "graph-node-kicker", "Your move"));
+        const label = el("span", "graph-node-label");
+        setTruncatedText(label, node.label || humanize(node.choice));
+        copy.append(label);
+        button.append(copy);
+        button.setAttribute("aria-label", `Your move: ${node.label || humanize(node.choice)}`);
+      } else if (kind === "response") {
+        const parts = responseCaption(node);
+        const choice = RESPONSE_CHOICES.includes(node.choice) ? node.choice : "ignore";
+        const dot = el("span", `choice-dot choice-${choice}`);
+        dot.setAttribute("aria-hidden", "true");
+        const copy = el("span", "graph-node-copy");
+        const rival = el("span", "graph-node-kicker");
+        const choiceLine = el("span", "graph-node-label");
+        const choiceText = graphChoiceLabel(node.choice);
+        setTruncatedText(rival, parts.rival);
+        setTruncatedText(choiceLine, choiceText);
+        copy.append(rival, choiceLine);
+        const glyph = el("span", "expand-glyph", "+");
+        glyph.setAttribute("aria-hidden", "true");
+        button.append(dot, copy, glyph);
+        button.setAttribute("aria-expanded", String(expanded.has(node.id)));
+        button.setAttribute("aria-label", `${parts.rival}: ${choiceText}`);
+        button.title = `${parts.rival}: ${choiceText}`;
+      } else {
+        const copy = el("span", "graph-node-copy");
+        const label = el("span", "graph-node-label");
+        const choiceText = graphChoiceLabel(node.choice);
+        setTruncatedText(label, choiceText);
+        copy.append(label);
+        const mid = node.score ? node.score.mid_pct : null;
+        const metric = el("span", `graph-node-metric graph-metric-${metricTone(mid)}`, signedPercentFixed(mid));
+        button.append(copy, metric);
+        button.setAttribute("aria-pressed", String(node.id === state.selectedLeafId));
+        button.setAttribute("aria-label", `${choiceText} ${signedPercentFixed(mid)}`);
+        button.title = `${humanize(node.choice)} ${signedPercentFixed(mid)}`;
+      }
+
+      if (node.id === winId) {
+        const mark = el("span", "graph-mark graph-mark-win");
+        mark.title = "Recommended";
+        mark.setAttribute("aria-label", "Recommended");
+        mark.append(starIcon());
+        button.append(mark);
+      } else if (node.id === runnerId) {
+        const mark = el("span", "graph-mark graph-mark-runner", "2");
+        mark.title = "Next-best option";
+        mark.setAttribute("aria-label", "Next-best option");
+        button.append(mark);
+      } else if (kind === "response" && runnerId && nodes.get(runnerId)?.parent === node.id && !expanded.has(node.id)) {
+        const mark = el("span", "graph-mark graph-mark-runner", "2");
+        mark.title = "Next-best option is in this response";
+        mark.setAttribute("aria-label", "Next-best option is in this response");
+        button.append(mark);
+      }
+
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (kind === "response") {
+          if (expanded.has(node.id)) expanded.delete(node.id);
+          else expanded.add(node.id);
+          paint(node.id);
+        } else if (kind === "leaf") {
+          state.selectedLeafId = node.id;
+          const listWidget = document.querySelector(".tree-widget");
+          if (listWidget) selectLeaf(node, listWidget, jargon);
+          paint(node.id);
+        }
+        showDetail(node);
+      });
+      stage.append(button);
+    });
+
+    if (focusId) {
+      const focused = stage.querySelector(`[data-node-id="${CSS.escape(focusId)}"]`);
+      if (focused) focused.focus();
+    }
+  }
+
+  closeButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    hideDetail();
+  });
+  detail.addEventListener("click", (event) => event.stopPropagation());
+
+  graphDismiss = new AbortController();
+  document.addEventListener("click", (event) => {
+    if (detail.hidden) return;
+    if (event.target.closest("[data-tree-detail]") || event.target.closest(".graph-node")) return;
+    hideDetail();
+  }, { signal: graphDismiss.signal });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideDetail();
+  }, { signal: graphDismiss.signal });
+
+  paint();
+  content.append(widget);
 }
 
 function renderRecommendation(recommendation, jargon) {
@@ -445,6 +897,10 @@ function applyAdvancedMode(enabled) {
 
 function render(data) {
   state.data = data;
+  if (graphDismiss) {
+    graphDismiss.abort();
+    graphDismiss = null;
+  }
   const feed = document.querySelector("#conversation-feed");
   feed.replaceChildren();
   const advancedToggle = document.querySelector('[data-control="advanced-toggle"]');
@@ -462,8 +918,9 @@ function render(data) {
   renderCompany(data.company, data.jargon);
   createMessage("What change are you considering?");
   renderUserMessage(data.move);
-  renderTree(data.tree, data.jargon);
   renderRecommendation(data.recommendation, data.jargon);
+  renderDecisionGraph(data.tree, data.recommendation, data.jargon);
+  if (hasTree(data.tree)) renderTree(data.tree, data.jargon);
   renderApproval(data.pendingAction, data.move, data.company);
   renderTrace(data.traceEvents);
   renderComposer();
