@@ -377,7 +377,7 @@ function renderApproval(action, move, company) {
   change.append(changeHeading, visualDiff);
   card.append(change);
 
-  const rawDiff = el("details", "raw-diff");
+  const rawDiff = el("details", "advanced-only raw-diff");
   rawDiff.append(el("summary", "", "View file diff"));
   rawDiff.append(el("pre", "", action.diff));
   card.append(rawDiff);
