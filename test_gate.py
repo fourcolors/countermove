@@ -181,6 +181,25 @@ class GateTests(unittest.TestCase):
         self.assertEqual(self.session["decisions"][0]["status"], "denied")
         self.assertEqual(self.session["trace"][-1]["column"], "did")
 
+    def test_deny_of_already_decided_action_is_not_traced_as_success(self):
+        action = self.pending()
+        self.gate.queue(action)
+        self.gate.deny(action["id"], "holding until next month")
+        success_text = "Saved the declined decision locally."
+        self.assertEqual(self.session["trace"][-1]["text"], success_text)
+
+        with self.assertRaises(GateRefused):
+            self.gate.deny(action["id"], "holding until next month")
+
+        texts = [event["text"] for event in self.session["trace"]]
+        self.assertEqual(texts.count(success_text), 1)
+        self.assertNotIn("Refused the change request.", texts)
+        self.assertEqual(
+            self.session["trace"][-1]["text"],
+            "A decline arrived for an already-decided request.",
+        )
+        self.assertEqual(self.session["decisions"][0]["status"], "denied")
+
     def test_denied_action_can_be_replaced_without_losing_history(self):
         denied = self.pending()
         self.gate.queue(denied)
