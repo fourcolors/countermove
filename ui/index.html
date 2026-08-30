@@ -69,6 +69,37 @@
       </article>
     </template>
 
+    <template id="decision-tree-template">
+      <section class="decision-tree-widget widget" aria-labelledby="decision-tree-title">
+        <div class="widget-heading tree-heading">
+          <div>
+            <span class="widget-label">Decision tree</span>
+            <h2 class="widget-title" id="decision-tree-title">Follow the simulation</h2>
+          </div>
+          <span class="node-count" data-tree-count></span>
+        </div>
+        <ul class="choice-legend" aria-label="Competitor response colors">
+          <li><span class="choice-dot choice-undercut" aria-hidden="true"></span>Undercut</li>
+          <li><span class="choice-dot choice-match" aria-hidden="true"></span>Match</li>
+          <li><span class="choice-dot choice-ignore" aria-hidden="true"></span>Ignore</li>
+          <li><span class="choice-dot choice-raise" aria-hidden="true"></span>Raise</li>
+        </ul>
+        <div class="decision-tree-viewport">
+          <div class="decision-tree-stage" data-tree-stage></div>
+        </div>
+        <div class="tree-detail" hidden data-tree-detail>
+          <div class="tree-detail-bar">
+            <div class="tree-detail-titles">
+              <span class="widget-label" data-tree-detail-actor></span>
+              <h3 class="tree-detail-heading" data-tree-detail-label></h3>
+            </div>
+            <button type="button" class="button button-secondary tree-detail-close" data-tree-detail-close>Close</button>
+          </div>
+          <div class="tree-detail-body" data-tree-detail-body></div>
+        </div>
+      </section>
+    </template>
+
     <script src="./app.js" defer></script>
   </body>
 </html>
