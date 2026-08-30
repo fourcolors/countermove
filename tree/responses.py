@@ -74,10 +74,19 @@ class ResponseProvider(ABC):
     Each response is ``{choice, price_before, price_after, reasoning, sources}``.
     ``choice`` must be one of ``RESPONSE_CHOICES``. A categorical choice
     without numeric prices is not a valid node.
+
+    ``request_scrape`` is an optional callback ``(url) -> {allowed, ...}``.
+    A provider that needs an extra page calls it; the orchestrator budget
+    allows one extra scrape per subagent and refuses the second.
     """
 
     @abstractmethod
-    def responses(self, competitor: Mapping[str, Any] | str, move: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def responses(
+        self,
+        competitor: Mapping[str, Any] | str,
+        move: Mapping[str, Any],
+        request_scrape: Any = None,
+    ) -> list[dict[str, Any]]:
         """Return the forced-choice response(s) for this competitor."""
 
 
@@ -107,7 +116,12 @@ class FixtureResponseProvider(ResponseProvider):
             }
         raise KeyError(f"no persona card for competitor {name!r}")
 
-    def responses(self, competitor: Mapping[str, Any] | str, move: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def responses(
+        self,
+        competitor: Mapping[str, Any] | str,
+        move: Mapping[str, Any],
+        request_scrape: Any = None,
+    ) -> list[dict[str, Any]]:
         facts = structured_facts(self._card_for(competitor))
         your_new_price = float(move["to"])
         before = facts["price"]
@@ -140,7 +154,12 @@ class LLMResponseProvider(ResponseProvider):
     def __init__(self, persona_cards: Sequence[Mapping[str, Any]] | None = None):
         self.persona_cards = list(persona_cards or [])
 
-    def responses(self, competitor: Mapping[str, Any] | str, move: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def responses(
+        self,
+        competitor: Mapping[str, Any] | str,
+        move: Mapping[str, Any],
+        request_scrape: Any = None,
+    ) -> list[dict[str, Any]]:
         raise NotImplementedError(
             "LLMResponseProvider is an integration seam; subagent context "
             "receives only schema-validated structured facts"

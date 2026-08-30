@@ -1,6 +1,7 @@
 """Countermove tree builder: responses, scoring, hashing, and recommendation."""
 
 from tree.build import build_tree
+from tree.edit import edit_assumption
 from tree.recommend import recommend
 from tree.responses import (
     COUNTER_CHOICES,
@@ -22,6 +23,7 @@ __all__ = [
     "ResponseProvider",
     "ScrapeBudget",
     "build_tree",
+    "edit_assumption",
     "recommend",
     "structured_facts",
 ]
