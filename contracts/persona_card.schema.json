@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "persona_card",
+  "type": "object",
+  "required": [
+    "competitor",
+    "price",
+    "pricing_url",
+    "news_urls"
+  ],
+  "properties": {
+    "competitor": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number"
+    },
+    "pricing_url": {
+      "type": "string"
+    },
+    "news_urls": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "schema-validated structured facts only; never raw page text"
+    }
+  }
+}

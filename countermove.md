@@ -117,7 +117,7 @@ The approval card carries the recommendation's first move. The watch trigger is 
 
 ## Provenance (Merkle tree)
 
-Every node carries `hash = sha256(canonical(content) + child hashes)`. Node content is every field of the node except `hash` itself (see the tree node schema in Data shapes). The root hash is written into the decision memo and the PR body.
+Every node carries `hash = sha256(canonical(content) + child hashes)`. Node content is every field of the node except `hash` and `children` - the children are bound through the concatenated child hashes, so the list itself is not re-hashed (see the tree node schema in Data shapes). The root hash is written into the decision memo and the PR body.
 
 `canonical()` is pinned so two implementations cannot disagree: JSON with lexicographically sorted keys (RFC 8785 style), UTF-8, floats rounded half-even to 6 decimal places and serialized in their shortest round-trip decimal form, negative zero normalized to zero, non-finite values invalid, `sources` sorted, segments sorted by id, child hashes concatenated in child-node-id order. Reference vectors covering rounding ties and near-zero values live in `contracts/` and are part of S2's tests.
 

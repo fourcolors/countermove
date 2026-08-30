@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "recommendation",
+  "type": "object",
+  "required": [
+    "path_id",
+    "sentence",
+    "band",
+    "runner_up_id",
+    "runner_up_reason",
+    "sensitivity",
+    "watch_trigger"
+  ],
+  "properties": {
+    "path_id": {
+      "type": "string"
+    },
+    "sentence": {
+      "type": "string"
+    },
+    "band": {
+      "type": "object",
+      "required": [
+        "low_pct",
+        "mid_pct",
+        "high_pct"
+      ],
+      "properties": {
+        "low_pct": {
+          "type": "number"
+        },
+        "mid_pct": {
+          "type": "number"
+        },
+        "high_pct": {
+          "type": "number"
+        }
+      }
+    },
+    "runner_up_id": {
+      "type": "string"
+    },
+    "runner_up_reason": {
+      "type": "string"
+    },
+    "sensitivity": {
+      "type": "object",
+      "required": [
+        "flips_ranking",
+        "statement"
+      ],
+      "properties": {
+        "flips_ranking": {
+          "type": "boolean"
+        },
+        "statement": {
+          "type": "string"
+        }
+      }
+    },
+    "watch_trigger": {
+      "type": "object",
+      "required": [
+        "competitor",
+        "threshold",
+        "window_days",
+        "statement"
+      ],
+      "properties": {
+        "competitor": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "window_days": {
+          "type": "number"
+        },
+        "statement": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

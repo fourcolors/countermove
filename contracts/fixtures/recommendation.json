@@ -1,0 +1,21 @@
+{
+  "path_id": "leaf-rival-a-ignore-hold",
+  "sentence": "Raise Pro to $59 and hold even if Rival A ignores it.",
+  "band": {
+    "low_pct": -1.4,
+    "mid_pct": -0.2,
+    "high_pct": 1.1
+  },
+  "runner_up_id": "leaf-rival-a-undercut-partial_rollback",
+  "runner_up_reason": "Partial rollback protects fewer customers than it costs in revenue.",
+  "sensitivity": {
+    "flips_ranking": false,
+    "statement": "No price-sensitivity range end flips the ranking; other assumptions are editable but not sensitivity-ranked."
+  },
+  "watch_trigger": {
+    "competitor": "Rival A",
+    "threshold": 42,
+    "window_days": 30,
+    "statement": "Rival A below $42 within 30 days would flip this recommendation."
+  }
+}

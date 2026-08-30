@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "tree_node",
+  "type": "object",
+  "required": [
+    "id",
+    "parent",
+    "actor",
+    "label",
+    "choice",
+    "price_before",
+    "price_after",
+    "reasoning",
+    "sources",
+    "assumptions",
+    "score",
+    "hash",
+    "children"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "parent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "actor": {
+      "enum": [
+        "you",
+        "competitor"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "choice": {
+      "enum": [
+        "price_change",
+        "undercut",
+        "match",
+        "ignore",
+        "raise",
+        "hold",
+        "partial_rollback",
+        "annual_discount"
+      ]
+    },
+    "price_before": {
+      "type": "number"
+    },
+    "price_after": {
+      "type": "number"
+    },
+    "reasoning": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "object"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "low",
+            "mid",
+            "high",
+            "low_pct",
+            "mid_pct",
+            "high_pct"
+          ],
+          "properties": {
+            "low": {
+              "type": "number"
+            },
+            "mid": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            },
+            "low_pct": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
+            },
+            "mid_pct": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
+            },
+            "high_pct": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "n/a"
+                }
+              ],
+              "description": "percent of baseline revenue, or 'n/a' when baseline is zero"
+            }
+          }
+        }
+      ]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

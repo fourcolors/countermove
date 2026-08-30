@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "company",
+  "type": "object",
+  "required": [
+    "name",
+    "plans",
+    "competitors"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "price",
+          "segments"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "customers",
+                "monthly_churn",
+                "elasticity",
+                "cross_elasticity"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "customers": {
+                  "type": "number"
+                },
+                "monthly_churn": {
+                  "type": "number"
+                },
+                "elasticity": {
+                  "type": "object",
+                  "required": [
+                    "low",
+                    "mid",
+                    "high"
+                  ],
+                  "properties": {
+                    "low": {
+                      "type": "number"
+                    },
+                    "mid": {
+                      "type": "number"
+                    },
+                    "high": {
+                      "type": "number"
+                    }
+                  },
+                  "description": "low is the more-negative endpoint; scalar e expands to {e-0.15, e, e+0.15}, high clamped below 0"
+                },
+                "cross_elasticity": {
+                  "type": "number"
+                },
+                "assumed": {
+                  "type": "boolean",
+                  "description": "true when defaults were applied; UI labels it 'assumed, not measured'"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "competitors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "price"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}
