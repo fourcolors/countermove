@@ -17,7 +17,11 @@ from orchestrator.session_store import SessionStore
 from orchestrator.tool_router import ToolRouter
 from orchestrator.trace import emit
 from bootstrap.move_parse import parse_move
-from bootstrap.llm_parse import normalize_move
+from bootstrap.llm_parse import (
+    accept_normalized_move,
+    normalize_move,
+    reconstruct_canonical,
+)
 from bootstrap.company_draft import draft_company
 import gather as gather_mod
 from tree import build, responses
@@ -48,13 +52,13 @@ def main(sentence: str, runner=None):
             sentence, company, runner=runner, strict_reply=move.reply
         )
         if isinstance(normalized, str):
-            move = parse_move(normalized, company)
+            move = accept_normalized_move(sentence, normalized, company)
             if isinstance(move, dict):
                 emit(
                     session,
                     "orchestrator",
                     "did",
-                    "interpreted your message as: %s" % normalized,
+                    "interpreted your message as: %s" % reconstruct_canonical(move),
                 )
             else:
                 SessionStore(str(SESSION_DIR)).save(session)

@@ -11,11 +11,15 @@ when GATE_REMOTE=1; otherwise a LocalRepoClient sandbox checkout under
 session/local-pricing (safe default for rehearsal).
 """
 
+import contextlib
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+import threading
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -29,6 +33,17 @@ from bootstrap.move_parse import Rejection
 import run_demo
 
 SESSION_DIR = ROOT / "session"
+_PIPELINE_LOCK = threading.Lock()
+
+
+class DemoServer(ThreadingHTTPServer):
+    """Concurrent GETs stay live while a /run normalize is in flight."""
+
+    daemon_threads = True
+
+
+def make_server(host="127.0.0.1", port=8420):
+    return DemoServer((host, port), Handler)
 
 
 def payload_for_run(returned, stdout_text):
@@ -77,6 +92,44 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_json(self, payload, code=200):
+        data = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _run_pipeline(self, body):
+        sentence = str(body.get("sentence", "")).strip()
+        if not sentence:
+            self._reject(400, "type a move first")
+            return
+        shutil.rmtree(SESSION_DIR, ignore_errors=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            returned = run_demo.main(sentence)
+        # run_demo wrote the fresh session itself; do not save a stale object over it.
+        self._send_json(payload_for_run(returned, out.getvalue().strip()))
+
+    def _gate_pipeline(self, body):
+        store = SessionStore(str(SESSION_DIR))
+        session = store.load()
+        gs = GateService(session, _repo_client())
+        try:
+            if self.path == "/gate/allow":
+                action_id = body["action_id"]
+                token = gate_ui.ui_allow(session, action_id)
+                result = gs.approve(action_id, token)
+                payload = {"ok": True, "result": str(result)}
+            else:
+                gs.deny(body["action_id"], body.get("reason", "not now"))
+                payload = {"ok": True, "result": "denied"}
+        except Exception as exc:
+            payload = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+        store.save(session)
+        self._send_json(payload)
+
     def do_POST(self):
         # The gate endpoint accepts only same-origin browser JSON posts:
         # a cross-origin page cannot mint-and-consume an approval in one shot.
@@ -89,50 +142,15 @@ class Handler(SimpleHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length) or b"{}")
-        store = SessionStore(str(SESSION_DIR))
-        session = store.load()
-        gs = GateService(session, _repo_client())
-        try:
-            if self.path == "/run":
-                sentence = str(body.get("sentence", "")).strip()
-                if not sentence:
-                    self._reject(400, "type a move first")
-                    return
-                import shutil, io, contextlib
-                shutil.rmtree(SESSION_DIR, ignore_errors=True)
-                out = io.StringIO()
-                with contextlib.redirect_stdout(out):
-                    returned = run_demo.main(sentence)
-                payload = payload_for_run(returned, out.getvalue().strip())
-                # run_demo wrote the fresh session itself; the stale pre-run
-                # object this handler loaded must NOT be saved over it.
-                data = json.dumps(payload).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-                return
-            elif self.path == "/gate/allow":
-                action_id = body["action_id"]
-                token = gate_ui.ui_allow(session, action_id)
-                result = gs.approve(action_id, token)
-                payload = {"ok": True, "result": str(result)}
-            elif self.path == "/gate/deny":
-                gs.deny(body["action_id"], body.get("reason", "not now"))
-                payload = {"ok": True, "result": "denied"}
-            else:
-                self.send_error(404)
-                return
-        except Exception as exc:
-            payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-        store.save(session)
-        data = json.dumps(payload).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        if self.path == "/run":
+            with _PIPELINE_LOCK:
+                self._run_pipeline(body)
+            return
+        if self.path in ("/gate/allow", "/gate/deny"):
+            with _PIPELINE_LOCK:
+                self._gate_pipeline(body)
+            return
+        self.send_error(404)
 
     def log_message(self, *args):
         pass
@@ -142,4 +160,4 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8420
     os.chdir(ROOT)
     print(f"serving on http://localhost:{port}/ (GATE_REMOTE={os.environ.get('GATE_REMOTE', '0')})")
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    make_server("127.0.0.1", port).serve_forever()
