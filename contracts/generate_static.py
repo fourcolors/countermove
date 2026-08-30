@@ -42,6 +42,11 @@ w("move.schema.json", {"$schema": S, "title": "move", "type": "object",
                  "action": {"const": "open_pr"}, "effective": {"type": "string", "format": "date"}}})
 
 w("tree_node.schema.json", {"$schema": S, "title": "tree_node", "type": "object",
+  "allOf": [
+    {"if": {"properties": {"actor": {"const": "competitor"}}},
+     "then": {"properties": {"choice": {"enum": ["undercut", "match", "ignore", "raise"]}}}},
+    {"if": {"properties": {"actor": {"const": "you"}}},
+     "then": {"properties": {"choice": {"enum": ["price_change", "hold", "partial_rollback", "annual_discount"]}}}}],
   "required": ["id", "parent", "actor", "label", "choice", "price_before", "price_after",
                "reasoning", "sources", "assumptions", "score", "hash", "children"],
   "properties": {
@@ -104,10 +109,14 @@ w("persona_card.schema.json", {"$schema": S, "title": "persona_card", "type": "o
                  "notes": {"type": "string", "description": "schema-validated structured facts only; never raw page text"}}})
 
 w("jargon.json", {
-  "elasticity": {"plain": "price sensitivity", "levels": {"low": "elasticity high end above -0.9",
-                 "medium": "-0.9 to -1.3", "high": "below -1.3"}},
+  "elasticity": {"plain": "price sensitivity",
+                 "levels": {"low": "elasticity high end above -0.9",
+                            "medium": "-0.9 to -1.3", "high": "below -1.3"},
+                 "thresholds": {"comment": "classify by mid elasticity: e > medium_min -> low sensitivity; e < high_max -> high; else medium",
+                                "medium_min": -0.9, "high_max": -1.3}},
   "cross_elasticity": {"plain": "how much your customers watch competitor prices",
-                       "levels": {"a little": "below 0.3", "some": "0.3 to 0.6", "a lot": "above 0.6"}},
+                       "levels": {"a little": "below 0.3", "some": "0.3 to 0.6", "a lot": "above 0.6"},
+                       "thresholds": {"some_min": 0.3, "a_lot_min": 0.6}},
   "monthly_churn": {"plain": "customers who leave each month"},
   "score_band": {"plain": "likely change in revenue over 6 months",
                  "format": "{mid_pct}% (between {low_pct}% and {high_pct}%)"}})
