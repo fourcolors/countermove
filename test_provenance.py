@@ -35,7 +35,7 @@ class CanonicalTests(unittest.TestCase):
         for vector in load_json("contracts/canonical_vectors.json"):
             with self.subTest(vector=vector["name"]):
                 self.assertEqual(
-                    canonical({"x": vector["input"]}),
+                    canonical(vector["input"]),
                     vector["canonical"].encode("utf-8"),
                 )
 
