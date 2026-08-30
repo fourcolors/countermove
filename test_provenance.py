@@ -138,3 +138,48 @@ class MerkleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PropertyTests(unittest.TestCase):
+    """Seeded generative property tests (stdlib random; no external deps)."""
+
+    def test_rounding_is_idempotent_and_ties_to_even_across_magnitudes(self):
+        import random as _random
+        from decimal import Decimal, ROUND_HALF_EVEN
+        rng = _random.Random(20260829)
+        for _ in range(5000):
+            x = rng.uniform(-1, 1) * (10 ** rng.randint(-9, 9))
+            once = canonical({"x": x})
+            value = json.loads(once.decode())["x"]
+            twice = canonical({"x": value})
+            self.assertEqual(once, twice, f"rounding not idempotent for {x!r}")
+            expected = float(Decimal(repr(x)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_EVEN))
+            if expected == 0.0:
+                expected = 0.0
+            self.assertEqual(value, expected, f"half-even mismatch for {x!r}")
+
+    def test_key_insertion_order_never_changes_canonical_bytes(self):
+        import random as _random
+        rng = _random.Random(20260830)
+        for _ in range(2000):
+            keys = [f"k{i}" for i in range(rng.randint(2, 8))]
+            values = {k: rng.choice([rng.random(), rng.randint(-9, 9), k, True, None]) for k in keys}
+            shuffled = list(keys)
+            rng.shuffle(shuffled)
+            a = canonical({k: values[k] for k in keys})
+            b = canonical({k: values[k] for k in shuffled})
+            self.assertEqual(a, b)
+
+    def test_negative_zero_always_normalizes(self):
+        import random as _random
+        rng = _random.Random(20260831)
+        for _ in range(500):
+            tiny = rng.uniform(-4.9e-7, 0)
+            out = canonical({"x": tiny}).decode()
+            self.assertIn('"x":0.0', out)
+            self.assertNotIn("-0.0", out)
+
+    def test_non_finite_always_raises(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with self.assertRaises(ValueError):
+                canonical({"x": bad})
