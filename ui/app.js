@@ -452,6 +452,11 @@ function render(data) {
   advancedToggle.id = advancedToggleId;
   advancedToggle.name = advancedToggleId;
   advancedToggle.closest("label").htmlFor = advancedToggleId;
+  if (data.isExample) {
+    const banner = el("p", "example-banner",
+      "This is an example decision so you can see the shape. Type your own move at the bottom and I will run it for real.");
+    feed.append(banner);
+  }
   createMessage("What is your company website?");
   renderWebsiteMessage(data.company);
   renderCompany(data.company, data.jargon);
@@ -461,6 +466,50 @@ function render(data) {
   renderRecommendation(data.recommendation, data.jargon);
   renderApproval(data.pendingAction, data.move, data.company);
   renderTrace(data.traceEvents);
+  renderComposer();
+}
+
+function renderComposer() {
+  const feed = document.querySelector("#conversation-feed");
+  const form = el("form", "composer");
+  const input = el("input", "composer-input");
+  input.type = "text";
+  input.id = "composer-input";
+  input.name = "composer-input";
+  input.placeholder = 'Try a move: "Raise Pro from $49 to $59 effective 2026-09-07"';
+  input.setAttribute("aria-label", "Describe the move you are considering");
+  const button = el("button", "button button-primary", "Simulate");
+  button.type = "submit";
+  form.append(input, button);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const sentence = input.value.trim();
+    if (!sentence) return;
+    button.disabled = true;
+    input.disabled = true;
+    button.textContent = "Simulating";
+    const status = el("p", "composer-status",
+      "Checking competitor pages, mapping responses, and scoring every path - a few seconds.");
+    form.after(status);
+    try {
+      const response = await fetch("/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sentence }),
+      });
+      const body = await response.json();
+      if (!body.ok) throw new Error(body.error || "the simulation could not run");
+      render(await loadData());
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      status.textContent = String(error.message || error);
+      status.classList.add("composer-error");
+      button.disabled = false;
+      input.disabled = false;
+      button.textContent = "Simulate";
+    }
+  });
+  feed.append(form);
 }
 
 function renderError(error) {
@@ -526,11 +575,16 @@ async function loadData() {
     const response = await fetch("/session/session.json", { cache: "no-store" });
     if (response.ok) {
       const session = await response.json();
-      if (session && session.tree) return sessionToData(session, fixtures.jargon, fixtures);
+      if (session && session.tree) {
+        const data = sessionToData(session, fixtures.jargon, fixtures);
+        data.isExample = false;
+        return data;
+      }
     }
   } catch (error) {
     console.info("no live session; rendering fixtures", error);
   }
+  fixtures.isExample = true;
   return fixtures;
 }
 

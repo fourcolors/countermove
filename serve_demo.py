@@ -25,6 +25,7 @@ from orchestrator.session_store import SessionStore
 from gate.service import GateService
 from gate.repo import LocalRepoClient, GitHubRepoClient
 from gate import ui as gate_ui
+import run_demo
 
 SESSION_DIR = ROOT / "session"
 
@@ -78,7 +79,30 @@ class Handler(SimpleHTTPRequestHandler):
         session = store.load()
         gs = GateService(session, _repo_client())
         try:
-            if self.path == "/gate/allow":
+            if self.path == "/run":
+                sentence = str(body.get("sentence", "")).strip()
+                if not sentence:
+                    self._reject(400, "type a move first")
+                    return
+                import shutil, io, contextlib
+                shutil.rmtree(SESSION_DIR, ignore_errors=True)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    run_demo.main(sentence)
+                text = out.getvalue().strip()
+                ran = "pending:" in text
+                payload = {"ok": ran, "result": text if ran else None,
+                           "error": None if ran else (text or "the simulation did not finish")}
+                # run_demo wrote the fresh session itself; the stale pre-run
+                # object this handler loaded must NOT be saved over it.
+                data = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            elif self.path == "/gate/allow":
                 action_id = body["action_id"]
                 token = gate_ui.ui_allow(session, action_id)
                 result = gs.approve(action_id, token)
