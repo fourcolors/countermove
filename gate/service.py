@@ -175,6 +175,17 @@ class GateService:
         )
         return url
 
+    def _refuse_deny(self, action_id: str, why: str) -> None:
+        """Trace-then-raise so a refused decline never vanishes from the audit trail."""
+        emit(
+            self.session,
+            "gate",
+            "did",
+            "A decline could not be recorded.",
+            detail={"action_id": action_id, "reason": why},
+        )
+        raise GateRefused(why)
+
     def deny(self, action_id: str, reason: str) -> Path:
         action = next(
             (
@@ -197,19 +208,19 @@ class GateService:
             )
             raise GateRefused("the action is not waiting for a decision")
         if not isinstance(reason, str) or not reason.strip():
-            raise GateRefused("a denial reason is required")
+            self._refuse_deny(action_id, "a denial reason is required")
         source = action.get("_gate_source")
         move = source.get("move") if isinstance(source, Mapping) else None
         if not isinstance(move, Mapping):
-            raise GateRefused("the stored move is missing")
+            self._refuse_deny(action_id, "the stored move is missing")
         plan = move.get("plan")
         effective = move.get("effective")
         if not isinstance(plan, str) or not isinstance(effective, str):
-            raise GateRefused("the stored move is invalid")
+            self._refuse_deny(action_id, "the stored move is invalid")
         try:
             memo_path = _memo_path(plan, effective)
         except ValueError:
-            raise GateRefused("the stored move has an invalid effective date")
+            self._refuse_deny(action_id, "the stored move has an invalid effective date")
 
         # The session owner may pin its directory through _session_dir.  The
         # fallback is explicit and retained in the session for later reloads.

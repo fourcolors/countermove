@@ -1140,8 +1140,12 @@ async function gateCall(path, actionId, button, reason) {
     });
     const body = await response.json();
     if (!body.ok) {
-      showGateNotice(button, "That request was already decided - run a new simulation.");
-      throw new Error(body.error || "gate refused");
+      const serverError = body.error || "the gate refused the request";
+      const notice = /not waiting/i.test(serverError)
+        ? "That request was already decided - run a new simulation."
+        : serverError.replace(/^GateRefused:\s*/, "");
+      showGateNotice(button, notice);
+      throw new Error(serverError);
     }
     const data = await loadData();
     render(data);
