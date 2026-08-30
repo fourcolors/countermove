@@ -15,6 +15,7 @@ KNOWN_URLS = {
     "https://rival-a.example/pricing": "rival-a.html",
     "https://rival-b.example/pricing": "rival-b.html",
     "https://rival-c.example/pricing": "rival-c.html",
+    "https://acme-stay.example": "acme-stay.html",
 }
 
 

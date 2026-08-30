@@ -6,7 +6,8 @@ import tempfile
 from pathlib import Path
 
 SESSION_FILENAME = "session.json"
-SESSION_KEYS = ("company", "move", "tree", "decisions", "trace", "snapshots")
+SESSION_KEYS = ("company", "move", "tree", "decisions", "trace", "snapshots",
+                "recommendation", "pending", "settings", "run_id", "persona_cards")
 
 
 def new_session():
@@ -17,6 +18,11 @@ def new_session():
         "decisions": [],
         "trace": [],
         "snapshots": [],
+        "recommendation": None,
+        "pending": [],
+        "settings": {},
+        "run_id": None,
+        "persona_cards": [],
     }
 
 

@@ -261,11 +261,16 @@ def trace_event(input_data: Mapping[str, Any], output: Mapping[str, Any]) -> dic
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 1:
-        print("usage: python3 score.py <input.json>", file=sys.stderr)
+    if len(args) > 1:
+        print("usage: python3 score.py <input.json>  (or JSON on stdin)", file=sys.stderr)
         return 2
     try:
-        input_data = json.loads(Path(args[0]).read_text(encoding="utf-8"))
+        if args:
+            raw = Path(args[0]).read_text(encoding="utf-8")
+        else:
+            # The orchestrator sandbox pipes the payload over stdin.
+            raw = sys.stdin.read()
+        input_data = json.loads(raw)
         result = score_leaf(input_data["company"], input_data["move"], input_data["leaf"])
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         print(f"score.py: {exc}", file=sys.stderr)

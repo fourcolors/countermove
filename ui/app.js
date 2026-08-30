@@ -36,18 +36,24 @@ const money = (value) => new Intl.NumberFormat("en-US", {
   maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
 }).format(value);
 
+function roundedPercentNumber(value) {
+  // Display precision only: one decimal, trailing .0 dropped ("+6%", "+7.7%").
+  const rounded = Math.round(Math.abs(Number(value)) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 function signedPercent(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
   const number = Number(value);
   const sign = number > 0 ? "+" : number < 0 ? "−" : "";
-  return `${sign}${Math.abs(number)}%`;
+  return `${sign}${roundedPercentNumber(number)}%`;
 }
 
 function signedPercentValue(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
   const number = Number(value);
   const sign = number > 0 ? "+" : number < 0 ? "−" : "";
-  return `${sign}${Math.abs(number)}`;
+  return `${sign}${roundedPercentNumber(number)}`;
 }
 
 function scoreSentence(score, jargon) {
@@ -387,6 +393,11 @@ function renderApproval(action, move, company) {
   approve.type = "button";
   const notNow = el("button", "button button-secondary", "Not now");
   notNow.type = "button";
+  approve.addEventListener("click", () => gateCall("/gate/allow", action.id, approve));
+  notNow.addEventListener("click", () => {
+    const reason = window.prompt("Why not now? (recorded with the decision)", "holding until next month");
+    if (reason !== null) gateCall("/gate/deny", action.id, notNow, reason);
+  });
   actions.append(approve, notNow);
   card.append(actions);
 
@@ -470,5 +481,58 @@ async function loadFixtures() {
   return Object.fromEntries(entries);
 }
 
+async function gateCall(path, actionId, button, reason) {
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Working";
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reason === undefined ? { action_id: actionId } : { action_id: actionId, reason }),
+    });
+    const body = await response.json();
+    if (!body.ok) throw new Error(body.error || "gate refused");
+    const data = await loadData();
+    render(data);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = original;
+    console.error("gate call failed:", error);
+  }
+}
+
+function sessionToData(session, jargon, fallback) {
+  const decisions = session.decisions || [];
+  const pendingAction = [...decisions].reverse().find((d) => d && d.status === "waiting")
+    || [...decisions].reverse().find((d) => d && d.status)
+    || fallback.pendingAction;
+  return {
+    company: session.company || fallback.company,
+    move: session.move || fallback.move,
+    tree: session.tree || fallback.tree,
+    recommendation: session.recommendation || fallback.recommendation,
+    pendingAction,
+    personas: session.persona_cards && session.persona_cards.length ? session.persona_cards : fallback.personas,
+    scoreResult: fallback.scoreResult,
+    traceEvents: session.trace && session.trace.length ? session.trace : fallback.traceEvents,
+    jargon,
+  };
+}
+
+async function loadData() {
+  const fixtures = await loadFixtures();
+  try {
+    const response = await fetch("/session/session.json", { cache: "no-store" });
+    if (response.ok) {
+      const session = await response.json();
+      if (session && session.tree) return sessionToData(session, fixtures.jargon, fixtures);
+    }
+  } catch (error) {
+    console.info("no live session; rendering fixtures", error);
+  }
+  return fixtures;
+}
+
 document.querySelector('[data-control="advanced-toggle"]').addEventListener("change", (event) => applyAdvancedMode(event.target.checked));
-loadFixtures().then(render).catch(renderError);
+loadData().then(render).catch(renderError);
