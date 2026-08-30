@@ -30,7 +30,7 @@ class ToolRouter:
 
     def register(self, name, fn):
         if name not in ALLOWLIST:
-            raise ToolRefused(name, "that tool is not on the allowed list")
+            self._refuse(name, "that tool is not on the allowed list")
         if not callable(fn):
             raise TypeError("tool must be callable")
         self._tools[name] = fn

@@ -40,7 +40,11 @@ def main(session_dir=None):
     sandbox = LocalSubprocessSandbox(session, timeout=10)
     store = SessionStore(session_dir)
 
+    def sandbox_exec(script_path, input_json=None):
+        return sandbox.run(script_path, input_json)
+
     router.register("brightdata.scrape_as_markdown", _fake_scrape)
+    router.register("sandbox.exec", sandbox_exec)
 
     emit(
         session,
@@ -65,7 +69,11 @@ def main(session_dir=None):
 
     script_path = Path(session_dir) / "echo.py"
     script_path.write_text(_ECHO_SCRIPT, encoding="utf-8")
-    sandbox.run(str(script_path), {"hello": "world"})
+    router.call(
+        "sandbox.exec",
+        script_path=str(script_path),
+        input_json={"hello": "world"},
+    )
 
     store.save(session)
 

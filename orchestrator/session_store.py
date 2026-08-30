@@ -51,6 +51,8 @@ class SessionStore:
             raise
 
     def load(self):
+        if not self.path.is_file():
+            return new_session()
         with self.path.open(encoding="utf-8") as handle:
             data = json.load(handle)
         session = new_session()

@@ -11,6 +11,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from pathlib import Path
 
+import orchestrator
 from orchestrator import (
     ALLOWLIST,
     LocalSubprocessSandbox,
@@ -23,6 +24,7 @@ from orchestrator import (
     new_session,
 )
 from orchestrator.hello_world import main as hello_world_main
+from orchestrator.trace import validate as validate_emitted_event
 
 ROOT = Path(__file__).resolve().parent
 SCHEMA_PATH = ROOT / "contracts" / "trace_event.schema.json"
@@ -109,6 +111,39 @@ class TestToolRouter(unittest.TestCase):
         router = ToolRouter(session)
         with self.assertRaises(ToolRefused):
             router.register("curl.fetch", lambda url: url)
+        self.assertTrue(session["trace"], "rejected registration must be traced")
+        event = session["trace"][-1]
+        self.assertIn("refus", event["text"].lower())
+        self.assertEqual(event["tool"], "curl.fetch")
+        self.assertEqual(event["column"], "did")
+        self.assertEqual(event["actor"], "orchestrator")
+        validate_trace_event(event)
+
+    def test_direct_bypass_impossible_via_public_surface(self):
+        dispatched = []
+        original = ToolRouter.call
+
+        def tracking_call(self, name, **kwargs):
+            dispatched.append(name)
+            return original(self, name, **kwargs)
+
+        ToolRouter.call = tracking_call
+        try:
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as tmp:
+                with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                    hello_world_main(tmp)
+        finally:
+            ToolRouter.call = original
+
+        self.assertIn("sandbox.exec", dispatched)
+        self.assertIn("brightdata.scrape_as_markdown", dispatched)
+
+        for name in ("call", "exec", "run_tool", "invoke"):
+            self.assertFalse(
+                hasattr(orchestrator, name),
+                "public surface must not expose %s as a router bypass" % name,
+            )
 
     def test_registered_allowlisted_tool_runs(self):
         session = new_session()
@@ -158,6 +193,58 @@ class TestTrace(unittest.TestCase):
         with self.assertRaises(ValueError):
             emit(session, "orchestrator", "maybe", "not a real column")
 
+    def test_reject_missing_required_field(self):
+        with self.assertRaises(ValueError):
+            validate_emitted_event(
+                {
+                    "actor": "orchestrator",
+                    "column": "did",
+                    "text": "checked Rival A's pricing page",
+                }
+            )
+
+    def test_reject_date_only_ts(self):
+        with self.assertRaises(ValueError):
+            validate_emitted_event(
+                {
+                    "ts": "2026-08-29",
+                    "actor": "orchestrator",
+                    "column": "did",
+                    "text": "checked Rival A's pricing page",
+                }
+            )
+
+    def test_reject_wrong_type_detail(self):
+        session = new_session()
+        with self.assertRaises(ValueError):
+            emit(
+                session,
+                "orchestrator",
+                "did",
+                "checked Rival A's pricing page",
+                detail="not an object",
+            )
+
+    def test_stored_event_is_immutable_snapshot(self):
+        session = new_session()
+        detail = {
+            "url": "https://rival-a.example/pricing",
+            "nested": {"price": 45},
+        }
+        emit(
+            session,
+            "orchestrator",
+            "did",
+            "checked Rival A's pricing page",
+            tool="brightdata.scrape_as_markdown",
+            detail=detail,
+        )
+        detail["url"] = "mutated"
+        detail["nested"]["price"] = 0
+        stored = session["trace"][-1]
+        self.assertEqual(stored["detail"]["url"], "https://rival-a.example/pricing")
+        self.assertEqual(stored["detail"]["nested"]["price"], 45)
+
 
 class TestSessionStore(unittest.TestCase):
     def test_round_trip(self):
@@ -187,6 +274,15 @@ class TestSessionStore(unittest.TestCase):
         self.assertEqual(len(loaded["trace"]), 1)
         validate_trace_event(loaded["trace"][0])
         self.assertEqual(loaded["trace"][0]["text"], session["trace"][0]["text"])
+
+    def test_load_missing_returns_fresh_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_dir = SessionStore(Path(tmp) / "does-not-exist")
+            from_missing_dir = missing_dir.load()
+            existing_dir = SessionStore(tmp)
+            from_missing_file = existing_dir.load()
+        self.assertEqual(from_missing_dir, new_session())
+        self.assertEqual(from_missing_file, new_session())
 
 
 class TestSandbox(unittest.TestCase):
